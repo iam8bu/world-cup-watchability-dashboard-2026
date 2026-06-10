@@ -597,7 +597,6 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
     baseline = 2 / 48
     ref = (baseline ** 2) / ceiling
 
-    title_fallback: set = set()
     watchability: dict = {}
     for g in SCHEDULE:
         key = (g["home"], g["away"])
@@ -612,7 +611,6 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
         tp_a = title_probs.get(g["away"], 0.0) or 0.0
         combined = tp_h + tp_a
         if combined <= ref:
-            title_fallback.add(key)
             stakes = 0.0
         else:
             stakes = max(0.0, min(math.log(combined / ref) / math.log(ceiling / ref), 1.0))
@@ -684,13 +682,12 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
             w = watchability.get(game_key)
             data_w = str(w) if w is not None else ""
             card_cls = watch_cls(w)
-            is_fallback = game_key in title_fallback
             tp_h = title_probs.get(g["home"])
             tp_a = title_probs.get(g["away"])
             watch_score_str = str(w) if w is not None else "—"
             watch_pending_html = (
                 '<span class="watch-pending">⚠ title odds pending</span>'
-                if is_fallback or (o and (tp_h is None or tp_a is None)) else ""
+                if o and (tp_h is None or tp_a is None) else ""
             )
 
             r = results.get(game_key)
