@@ -1,0 +1,41 @@
+name: Update World Cup Odds Dashboard
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 9am ET (UTC-4 during summer)
+  workflow_dispatch:        # allow manual runs
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch latest odds
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python fetch_odds.py
+
+      - name: Rebuild dashboard
+        run: python build_dashboard.py
+
+      - name: Commit and push changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html odds.db
+          git diff --cached --quiet || git commit -m "chore: update odds $(date -u '+%Y-%m-%d')"
+          git push
