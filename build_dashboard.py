@@ -482,8 +482,12 @@ def build_html(odds: dict, fetched_at) -> str:
     if fetched_at:
         try:
             from datetime import datetime, timezone
+            from zoneinfo import ZoneInfo
             dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-            updated_str = dt.strftime("%b %d, %Y %H:%M UTC")
+            et = dt.astimezone(ZoneInfo("America/New_York"))
+            tz_label = "EDT" if et.dst() else "EST"
+            time_str = et.strftime("%I:%M %p").lstrip("0")
+            updated_str = et.strftime("%b %d, %Y ") + time_str + " " + tz_label
         except Exception:
             updated_str = fetched_at
     else:
@@ -598,9 +602,9 @@ def build_html(odds: dict, fetched_at) -> str:
         f'<span class="s-value small">{esc(updated_str)}</span></div>',
         "</div>",
         '<div class="legend-bar">',
-        '<span><span class="dot green"></span>Tight (&lt;55% favorite)</span>',
-        '<span><span class="dot amber"></span>Clear favorite (55&ndash;72%)</span>',
-        '<span><span class="dot red"></span>Heavy mismatch (&gt;72%)</span>',
+        '<span><span class="dot green"></span>Competitive (favorite &lt;65%)</span>',
+        '<span><span class="dot amber"></span>Favored (65&ndash;80%)</span>',
+        '<span><span class="dot red"></span>Heavy favorite (&gt;80%)</span>',
         '<span style="color:#3b82f6">&#9632;</span><span>Home win</span>',
         '<span style="color:#6b7280">&#9632;</span><span>Draw</span>',
         '<span style="color:#f97316">&#9632;</span><span>Away win</span>',
