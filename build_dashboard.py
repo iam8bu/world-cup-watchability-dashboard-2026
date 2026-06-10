@@ -299,11 +299,10 @@ header h1 span { color: var(--blue); }
 .team-row { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
 .team-flag { font-size: 16px; line-height: 1; flex-shrink: 0; }
 .team-name { flex: 1; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-prob { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.team-prob.home-col { color: var(--blue); }
-.team-prob.away-col { color: var(--orange); }
-.team-prob.na       { color: var(--muted); font-weight: 400; }
 .vs-line { font-size: 10px; color: var(--muted); padding: 1px 0 1px 23px; }
+.color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.home-dot  { background: var(--blue); }
+.away-dot  { background: var(--orange); }
 
 /* Segmented probability bar */
 .seg-bar-wrap { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin: 8px 0 7px; background: var(--border); }
@@ -534,11 +533,13 @@ def build_html(odds: dict, fetched_at) -> str:
                 f'</div>'
                 f'<div class="matchup">'
                 f'<div class="team-row">'
+                f'<span class="color-dot home-dot"></span>'
                 f'<span class="team-flag">{flag(g["home"])}</span>'
                 f'<span class="team-name">{esc(g["home"])}</span>'
                 f'</div>'
                 f'<div class="vs-line">vs</div>'
                 f'<div class="team-row">'
+                f'<span class="color-dot away-dot"></span>'
                 f'<span class="team-flag">{flag(g["away"])}</span>'
                 f'<span class="team-name">{esc(g["away"])}</span>'
                 f'</div>'
