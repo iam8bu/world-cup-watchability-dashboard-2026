@@ -287,8 +287,15 @@ header h1 span { color: var(--blue); }
 .game-card.gray  { border-left-color: #374151;       background: var(--gray-dim);  border-color: var(--gray-bdr);  }
 
 .card-top {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;
+  display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 9px;
 }
+.comp-badge {
+  font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px;
+  letter-spacing: .3px; white-space: nowrap;
+}
+.comp-badge.green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); }
+.comp-badge.amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-bdr); }
+.comp-badge.red   { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-bdr);   }
 .grp-badge {
   background: var(--blue); color: #fff;
   font-size: 9px; font-weight: 700;
@@ -437,16 +444,22 @@ def fmt_pct(p, d: int = 1) -> str:
     return "—" if p is None else f"{p * 100:.{d}f}%"
 
 
-def color_cls(home_prob, away_prob) -> str:
-    """Color by match competitiveness (favorite's win probability)."""
+COMP_LABELS = {
+    "green": "Open game",
+    "amber": "Moderate favorite",
+    "red":   "Heavy favorite",
+}
+
+def color_cls(home_prob, draw_prob, away_prob) -> str:
+    """Color by the highest single-outcome probability across all three outcomes."""
     if home_prob is None:
         return "gray"
-    fav = max(home_prob, away_prob)
-    if fav < 0.65:
-        return "green"   # competitive
-    if fav < 0.80:
-        return "amber"   # clear favorite
-    return "red"         # heavy mismatch (>80%)
+    peak = max(home_prob, draw_prob, away_prob)
+    if peak < 0.50:
+        return "green"   # no single outcome is a coin-flip favorite
+    if peak < 0.70:
+        return "amber"   # one outcome leads but game is still open
+    return "red"         # heavy favorite
 
 
 def flag(team: str) -> str:
@@ -537,7 +550,12 @@ def build_html(odds: dict, fetched_at) -> str:
             hp = o["home_prob"] if o else None
             dp = o["draw_prob"] if o else None
             ap = o["away_prob"] if o else None
-            cls = color_cls(hp, ap)
+            cls = color_cls(hp, dp, ap)
+            comp_label = COMP_LABELS.get(cls, "")
+            comp_badge = (
+                f'<span class="comp-badge {cls}">{comp_label}</span>'
+                if comp_label else ""
+            )
 
             if hp is not None:
                 home_w = int(hp * 100)
@@ -562,6 +580,7 @@ def build_html(odds: dict, fetched_at) -> str:
                 f'<div class="game-card {cls}">'
                 f'<div class="card-top">'
                 f'<span class="grp-badge">GRP {esc(g["grp"])}</span>'
+                + comp_badge +
                 f'<span class="card-time">{esc(g["time"])}</span>'
                 f'</div>'
                 f'<div class="matchup">'
@@ -630,9 +649,9 @@ def build_html(odds: dict, fetched_at) -> str:
         f'<span class="s-value small">{esc(updated_str)}</span></div>',
         "</div>",
         '<div class="legend-bar">',
-        '<span><span class="dot green"></span>Competitive (favorite &lt;65%)</span>',
-        '<span><span class="dot amber"></span>Favored (65&ndash;80%)</span>',
-        '<span><span class="dot red"></span>Heavy favorite (&gt;80%)</span>',
+        '<span><span class="dot green"></span>Open game (no outcome &gt;50%)</span>',
+        '<span><span class="dot amber"></span>Moderate favorite (50&ndash;70%)</span>',
+        '<span><span class="dot red"></span>Heavy favorite (&gt;70%)</span>',
         '<span style="color:#3b82f6">&#9632;</span><span>Home win</span>',
         '<span style="color:#6b7280">&#9632;</span><span>Draw</span>',
         '<span style="color:#f97316">&#9632;</span><span>Away win</span>',
