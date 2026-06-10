@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read the latest h2h match odds from odds.db and write index.html."""
 
+import math
 import sqlite3
 import os
 from html import escape as esc
@@ -589,6 +590,13 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
     tp_france = title_probs.get("France", 0.0) or 0.0
     max_combined = tp_spain + tp_france
 
+    ceiling = max_combined if max_combined > 0 else 0.349
+    # ref is the zero-anchor: derived so that combined=2/48 (one avg team each)
+    # maps to exactly 0.5. formula: log(combined/ref) / log(ceiling/ref)
+    # solving for ref given score(2/48)=0.5 → ref = (2/48)² / ceiling
+    baseline = 2 / 48
+    ref = (baseline ** 2) / ceiling
+
     title_fallback: set = set()
     watchability: dict = {}
     for g in SCHEDULE:
@@ -600,13 +608,14 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
         max_outcome = max(o["home_prob"], o["draw_prob"], o["away_prob"])
         competitiveness = 1.0 - ((max_outcome - 1/3) / (2/3))
 
-        if max_combined == 0.0:
+        tp_h = title_probs.get(g["home"], 0.0) or 0.0
+        tp_a = title_probs.get(g["away"], 0.0) or 0.0
+        combined = tp_h + tp_a
+        if combined <= ref:
             title_fallback.add(key)
-            stakes = 1.0
+            stakes = 0.0
         else:
-            tp_h = title_probs.get(g["home"], 0.0) or 0.0
-            tp_a = title_probs.get(g["away"], 0.0) or 0.0
-            stakes = min((tp_h + tp_a) / max_combined, 1.0)
+            stakes = max(0.0, min(math.log(combined / ref) / math.log(ceiling / ref), 1.0))
 
         watchability[key] = round(((competitiveness + stakes) / 2) * 100)
 
