@@ -602,12 +602,16 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
 
         if max_combined == 0.0:
             title_fallback.add(key)
-            watchability[key] = round(competitiveness * 100)
+            stakes = 1.0
         else:
             tp_h = title_probs.get(g["home"], 0.0) or 0.0
             tp_a = title_probs.get(g["away"], 0.0) or 0.0
             stakes = min((tp_h + tp_a) / max_combined, 1.0)
-            watchability[key] = round(competitiveness * stakes * 100)
+
+        if competitiveness > 0 and stakes > 0:
+            watchability[key] = round((2 * competitiveness * stakes / (competitiveness + stakes)) * 100)
+        else:
+            watchability[key] = 0
 
     # ---- schedule ----
     date_games: dict = {}
