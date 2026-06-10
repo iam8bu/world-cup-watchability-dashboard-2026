@@ -127,6 +127,15 @@ def init_db(conn: sqlite3.Connection) -> None:
             fetched_at  TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS odds_snapshots (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            team          TEXT NOT NULL,
+            odds_american REAL NOT NULL,
+            implied_prob  REAL NOT NULL,
+            fetched_at    TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
 
@@ -284,9 +293,73 @@ def fetch_and_store_scores(api_key: str, db_path: str = "odds.db") -> None:
         conn.close()
 
 
+def fetch_and_store_outrights(api_key: str, db_path: str = "odds.db") -> None:
+    url = "https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup_winner/odds"
+    params = {
+        "apiKey": api_key,
+        "regions": "us",
+        "markets": "outrights",
+        "oddsFormat": "american",
+    }
+
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+
+    remaining = resp.headers.get("x-requests-remaining", "?")
+    used = resp.headers.get("x-requests-used", "?")
+    print(f"Outrights API quota — used: {used}, remaining: {remaining}")
+
+    if not data:
+        print("WARNING: Outrights API returned empty list.")
+        return
+
+    # For each team, take the best (lowest implied probability) line across all bookmakers
+    best_by_team: dict = {}  # team -> (odds_american, implied_prob)
+
+    for event in data:
+        for bookmaker in event.get("bookmakers", []):
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "outrights":
+                    continue
+                for outcome in market.get("outcomes", []):
+                    team_raw = outcome["name"]
+                    team = normalize(team_raw)
+                    american = outcome["price"]
+                    implied = american_to_implied(american)
+
+                    if team not in best_by_team or implied < best_by_team[team][1]:
+                        best_by_team[team] = (american, implied)
+
+    if not best_by_team:
+        print("WARNING: No outright odds found.")
+        return
+
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(db_path)
+    try:
+        init_db(conn)
+        rows = [
+            (team, american, implied, fetched_at)
+            for team, (american, implied) in best_by_team.items()
+        ]
+        for team, american, implied, _ in rows:
+            print(f"  {team:<22} {american:+7.0f}  ({implied*100:.1f}%)")
+        conn.executemany(
+            "INSERT INTO odds_snapshots (team, odds_american, implied_prob, fetched_at) "
+            "VALUES (?,?,?,?)",
+            rows,
+        )
+        conn.commit()
+        print(f"\nStored outright odds for {len(rows)} teams at {fetched_at}")
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     key = os.environ.get("ODDS_API_KEY")
     if not key:
         raise SystemExit("ERROR: ODDS_API_KEY environment variable not set.")
     fetch_and_store(key)
     fetch_and_store_scores(key)
+    fetch_and_store_outrights(key)

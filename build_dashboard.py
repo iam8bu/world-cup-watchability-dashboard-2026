@@ -306,7 +306,9 @@ header h1 span { color: var(--blue); }
 .matchup { margin-bottom: 9px; }
 .team-row { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
 .team-flag { font-size: 16px; line-height: 1; flex-shrink: 0; }
-.team-name { flex: 1; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-name-wrap { flex: 1; min-width: 0; }
+.team-name { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.title-prob { display: block; font-size: 9px; color: var(--muted); margin-top: 1px; }
 .vs-line { font-size: 10px; color: var(--muted); padding: 1px 0 1px 23px; }
 .color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .home-dot  { background: var(--blue); }
@@ -421,6 +423,36 @@ footer a { color: var(--blue); text-decoration: none; }
   .summary-item  { border-right: none; border-bottom: 1px solid var(--border); }
   .games-grid    { grid-template-columns: 1fr; }
 }
+
+/* ── Watchability ── */
+.watch-row { display: flex; align-items: center; gap: 6px; margin: 6px 0 4px; }
+.watch-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); flex-shrink: 0; }
+.watch-score { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.game-card.green .watch-score { color: var(--green); }
+.game-card.amber .watch-score { color: var(--amber); }
+.game-card.red   .watch-score { color: var(--red); }
+.game-card.gray  .watch-score { color: var(--muted); }
+.watch-pending { font-size: 9px; color: var(--amber); margin-left: 2px; }
+.faded { opacity: .42; }
+
+/* ── Date chip (visible in watchability sort only) ── */
+.date-chip {
+  display: none; font-size: 9px; color: var(--muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px; white-space: nowrap;
+}
+
+/* ── Sort toggle ── */
+.sort-toggle { display: flex; gap: 6px; margin-bottom: 13px; }
+.sort-btn {
+  padding: 5px 12px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  cursor: pointer; letter-spacing: .3px;
+  transition: background .12s, color .12s;
+}
+.sort-btn:hover { background: var(--surface2); color: var(--text); }
+.sort-active { background: var(--blue) !important; color: #fff !important; border-color: var(--blue) !important; }
 """
 
 # ---------------------------------------------------------------------------
@@ -497,19 +529,53 @@ COMP_LABELS = {
 }
 
 def color_cls(home_prob, draw_prob, away_prob) -> str:
-    """Color by the highest single-outcome probability across all three outcomes."""
+    """Color by the highest single-outcome probability — used for comp badge."""
     if home_prob is None:
         return "gray"
     peak = max(home_prob, draw_prob, away_prob)
     if peak < 0.50:
-        return "green"   # no single outcome is a coin-flip favorite
+        return "green"
     if peak < 0.70:
-        return "amber"   # one outcome leads but game is still open
-    return "red"         # heavy favorite
+        return "amber"
+    return "red"
+
+
+def watch_cls(w) -> str:
+    """Card color class based on normalized watchability score."""
+    if w is None:
+        return "gray"
+    if w >= 60:
+        return "green"
+    if w >= 30:
+        return "amber"
+    return "red"
 
 
 def flag(team: str) -> str:
     return FLAGS.get(team, "🏳️")
+
+
+def get_title_probs(db_path: str) -> dict:
+    """Return {team: implied_prob} from the most recent odds_snapshots row per team."""
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path)
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='odds_snapshots'"
+        ).fetchone()
+        if not tbl:
+            return {}
+        rows = conn.execute("""
+            SELECT team, implied_prob FROM odds_snapshots o1
+            WHERE fetched_at = (
+                SELECT MAX(fetched_at) FROM odds_snapshots o2
+                WHERE o2.team = o1.team
+            )
+        """).fetchall()
+        return {team: prob for team, prob in rows}
+    finally:
+        conn.close()
 
 
 def team_expected_wins(team: str, odds: dict):
@@ -534,9 +600,37 @@ def team_expected_wins(team: str, odds: dict):
 # HTML builder
 # ---------------------------------------------------------------------------
 
-def build_html(odds: dict, fetched_at, results: dict = None) -> str:
+def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict = None) -> str:
     if results is None:
         results = {}
+    if title_probs is None:
+        title_probs = {}
+
+    # ---- pre-compute watchability for all 72 games ----
+    raw_scores: dict = {}
+    title_fallback: set = set()
+    for g in SCHEDULE:
+        key = (g["home"], g["away"])
+        o = odds.get(key)
+        if not o:
+            raw_scores[key] = None
+            continue
+        max_outcome = max(o["home_prob"], o["draw_prob"], o["away_prob"])
+        tp_h = title_probs.get(g["home"])
+        tp_a = title_probs.get(g["away"])
+        if tp_h is None and tp_a is None:
+            raw_scores[key] = 1.0 - max_outcome
+            title_fallback.add(key)
+        else:
+            raw_scores[key] = (1.0 - max_outcome) * ((tp_h or 0.0) + (tp_a or 0.0))
+
+    valid = [v for v in raw_scores.values() if v is not None]
+    max_raw = max(valid) if valid else 1.0
+    watchability: dict = {
+        k: (round((v / max_raw) * 100) if v is not None else None)
+        for k, v in raw_scores.items()
+    }
+
     # ---- schedule ----
     date_games: dict = {}
     for g in SCHEDULE:
@@ -594,14 +688,26 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
             f'</div><div class="games-grid">'
         )
         for g in games:
-            o = odds.get((g["home"], g["away"]))
+            game_key = (g["home"], g["away"])
+            o = odds.get(game_key)
             hp = o["home_prob"] if o else None
             dp = o["draw_prob"] if o else None
             ap = o["away_prob"] if o else None
-            cls = color_cls(hp, dp, ap)
-            comp_label = COMP_LABELS.get(cls, "")
+            w = watchability.get(game_key)
+            data_w = str(w) if w is not None else ""
+            card_cls = watch_cls(w)
+            comp_cls = color_cls(hp, dp, ap)
+            comp_label = COMP_LABELS.get(comp_cls, "")
+            is_fallback = game_key in title_fallback
+            tp_h = title_probs.get(g["home"])
+            tp_a = title_probs.get(g["away"])
+            watch_score_str = str(w) if w is not None else "—"
+            watch_pending_html = (
+                '<span class="watch-pending">⚠ title odds pending</span>'
+                if is_fallback or (o and (tp_h is None or tp_a is None)) else ""
+            )
 
-            r = results.get((g["home"], g["away"]))
+            r = results.get(game_key)
 
             if r:
                 # ── completed game ──────────────────────────────────────────
@@ -649,25 +755,45 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
                 else:
                     hist_html = ""
 
+                home_tp_html = (
+                    f'<span class="title-prob faded">{tp_h*100:.1f}% title odds</span>'
+                    if tp_h is not None else ""
+                )
+                away_tp_html = (
+                    f'<span class="title-prob faded">{tp_a*100:.1f}% title odds</span>'
+                    if tp_a is not None else ""
+                )
+
                 sched.append(
-                    f'<div class="game-card {cls}">'
+                    f'<div class="game-card {card_cls}" data-w="{data_w}" data-date="{esc(g["date"])}">'
                     f'<div class="card-top">'
                     f'<span class="grp-badge">GRP {esc(g["grp"])}</span>'
                     + upset_badge +
+                    f'<span class="date-chip">{esc(g["date"])}</span>'
                     f'<span class="final-badge">FINAL</span>'
+                    f'</div>'
+                    f'<div class="watch-row faded">'
+                    f'<span class="watch-label">Watchability</span>'
+                    f'<span class="watch-score">{watch_score_str}</span>'
                     f'</div>'
                     f'<div class="matchup">'
                     f'<div class="team-row {home_cls}">'
                     f'<span class="color-dot home-dot"></span>'
                     f'<span class="team-flag">{flag(g["home"])}</span>'
+                    f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["home"])}</span>'
+                    + home_tp_html +
+                    f'</div>'
                     f'<span class="team-score">{hs}</span>'
                     f'</div>'
                     f'<div class="vs-line">vs</div>'
                     f'<div class="team-row {away_cls}">'
                     f'<span class="color-dot away-dot"></span>'
                     f'<span class="team-flag">{flag(g["away"])}</span>'
+                    f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["away"])}</span>'
+                    + away_tp_html +
+                    f'</div>'
                     f'<span class="team-score">{aws}</span>'
                     f'</div>'
                     f'</div>'
@@ -678,7 +804,7 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
             else:
                 # ── upcoming / no result yet ─────────────────────────────────
                 comp_badge = (
-                    f'<span class="comp-badge {cls}">{comp_label}</span>'
+                    f'<span class="comp-badge {comp_cls}">{comp_label}</span>'
                     if comp_label else ""
                 )
 
@@ -701,24 +827,45 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
                 else:
                     prob_html = '<div class="no-odds-msg">Odds not yet available</div>'
 
+                home_tp_html = (
+                    f'<span class="title-prob">{tp_h*100:.1f}% title odds</span>'
+                    if tp_h is not None else ""
+                )
+                away_tp_html = (
+                    f'<span class="title-prob">{tp_a*100:.1f}% title odds</span>'
+                    if tp_a is not None else ""
+                )
+
                 sched.append(
-                    f'<div class="game-card {cls}">'
+                    f'<div class="game-card {card_cls}" data-w="{data_w}" data-date="{esc(g["date"])}">'
                     f'<div class="card-top">'
                     f'<span class="grp-badge">GRP {esc(g["grp"])}</span>'
                     + comp_badge +
+                    f'<span class="date-chip">{esc(g["date"])}</span>'
                     f'<span class="card-time">{esc(g["time"])}</span>'
+                    f'</div>'
+                    f'<div class="watch-row">'
+                    f'<span class="watch-label">Watchability</span>'
+                    f'<span class="watch-score">{watch_score_str}</span>'
+                    + watch_pending_html +
                     f'</div>'
                     f'<div class="matchup">'
                     f'<div class="team-row">'
                     f'<span class="color-dot home-dot"></span>'
                     f'<span class="team-flag">{flag(g["home"])}</span>'
+                    f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["home"])}</span>'
+                    + home_tp_html +
+                    f'</div>'
                     f'</div>'
                     f'<div class="vs-line">vs</div>'
                     f'<div class="team-row">'
                     f'<span class="color-dot away-dot"></span>'
                     f'<span class="team-flag">{flag(g["away"])}</span>'
+                    f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["away"])}</span>'
+                    + away_tp_html +
+                    f'</div>'
                     f'</div>'
                     f'</div>'
                     + prob_html +
@@ -774,9 +921,9 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
         f'<span class="s-value small">{esc(updated_str)}</span></div>',
         "</div>",
         '<div class="legend-bar">',
-        '<span><span class="dot green"></span>Open game (no outcome &gt;50%)</span>',
-        '<span><span class="dot amber"></span>Moderate favorite (50&ndash;70%)</span>',
-        '<span><span class="dot red"></span>Heavy favorite (&gt;70%)</span>',
+        '<span><span class="dot green"></span>High watchability (&ge;60)</span>',
+        '<span><span class="dot amber"></span>Moderate watchability (30&ndash;59)</span>',
+        '<span><span class="dot red"></span>Low watchability (&lt;30)</span>',
         '<span style="color:#3b82f6">&#9632;</span><span>Home win</span>',
         '<span style="color:#6b7280">&#9632;</span><span>Draw</span>',
         '<span style="color:#f97316">&#9632;</span><span>Away win</span>',
@@ -785,7 +932,13 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
         '<div class="main-layout">',
         '<div class="schedule-col">',
         '<div class="section-label">Group Stage Schedule &mdash; 72 Games</div>',
+        '<div class="sort-toggle">',
+        '<button id="btn-date" class="sort-btn sort-active" onclick="setSort(\'date\')">By date</button>',
+        '<button id="btn-watch" class="sort-btn" onclick="setSort(\'watch\')">By watchability</button>',
+        '</div>',
+        '<div id="schedule-content">',
         "".join(sched),
+        "</div>",
         "</div>",
         '<div class="sidebar-col">',
         '<div class="section-label">Group Standings &mdash; Expected Wins</div>',
@@ -796,6 +949,26 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
         "<footer><p>Odds from "
         '<a href="https://the-odds-api.com" target="_blank" rel="noopener">The Odds API</a>'
         " &bull; Vig removed &bull; Probabilities averaged across available US bookmakers</p></footer>",
+        "<script>",
+        "(function(){",
+        "var s=document.getElementById('schedule-content');",
+        "var snap=s.innerHTML;",
+        "var mode='date';",
+        "window.setSort=function(m){",
+        "if(m===mode)return;",
+        "mode=m;",
+        "document.getElementById('btn-date').classList.toggle('sort-active',m==='date');",
+        "document.getElementById('btn-watch').classList.toggle('sort-active',m==='watch');",
+        "if(m==='date'){s.innerHTML=snap;}",
+        "else{",
+        "var cards=Array.prototype.slice.call(s.querySelectorAll('.game-card'));",
+        "cards.sort(function(a,b){return(parseInt(b.dataset.w)||0)-(parseInt(a.dataset.w)||0);});",
+        "cards.forEach(function(c){var d=c.querySelector('.date-chip');if(d)d.style.display='inline-flex';});",
+        "var g=document.createElement('div');g.className='games-grid';",
+        "cards.forEach(function(c){g.appendChild(c);});",
+        "s.innerHTML='';s.appendChild(g);",
+        "}};})();",
+        "</script>",
         "</body></html>",
     ]
     return "\n".join(parts)
@@ -808,10 +981,11 @@ def build_html(odds: dict, fetched_at, results: dict = None) -> str:
 def main() -> None:
     odds, fetched_at = get_odds(DB_PATH)
     results = get_results(DB_PATH)
+    title_probs = get_title_probs(DB_PATH)
     if not odds:
         print("WARNING: No match odds in DB — generating skeleton dashboard.")
 
-    html = build_html(odds, fetched_at, results)
+    html = build_html(odds, fetched_at, results, title_probs)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
