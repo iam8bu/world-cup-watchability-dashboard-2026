@@ -224,6 +224,7 @@ header h1 span { color: var(--blue); }
 }
 .s-value { display: block; font-size: 1.25rem; font-weight: 700; }
 .s-value.small { font-size: .95rem; }
+.s-sub { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
 
 /* ── Legend ── */
 .legend-bar {
@@ -482,6 +483,31 @@ def build_html(odds: dict, fetched_at) -> str:
 
     games_with_odds = sum(1 for g in SCHEDULE if (g["home"], g["away"]) in odds)
 
+    # ---- game of the day (most competitive match today in ET) ----
+    gotd_matchup = "No games today"
+    gotd_time = ""
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        today_et = datetime.now(ZoneInfo("America/New_York"))
+        today_fmt = today_et.strftime("%a, %b ") + str(today_et.day)
+        today_with_odds = [
+            (g, odds[(g["home"], g["away"])])
+            for g in SCHEDULE
+            if g["date"] == today_fmt and (g["home"], g["away"]) in odds
+        ]
+        if today_with_odds:
+            best_g, best_o = min(
+                today_with_odds,
+                key=lambda x: max(x[1]["home_prob"], x[1]["away_prob"]),
+            )
+            gotd_matchup = f'{esc(best_g["home"])} vs {esc(best_g["away"])}'
+            gotd_time = best_g["time"]
+        elif any(g["date"] == today_fmt for g in SCHEDULE):
+            gotd_matchup = "Odds pending"
+    except Exception:
+        pass
+
     if fetched_at:
         try:
             from datetime import datetime, timezone
@@ -597,10 +623,9 @@ def build_html(odds: dict, fetched_at) -> str:
         '<p class="subtitle">Group Stage Dashboard &bull; h2h win probabilities averaged across US bookmakers &bull; Updated daily</p>',
         "</header>",
         '<div class="summary-strip">',
-        '<div class="summary-item"><span class="s-label">Matches Covered</span>',
-        f'<span class="s-value">{games_with_odds}&thinsp;/&thinsp;72</span></div>',
-        '<div class="summary-item"><span class="s-label">Color Key</span>',
-        '<span class="s-value small">Competitiveness</span></div>',
+        '<div class="summary-item"><span class="s-label">Game of the Day</span>',
+        f'<span class="s-value small">{gotd_matchup}</span>',
+        f'<span class="s-sub">{esc(gotd_time)}</span></div>',
         '<div class="summary-item"><span class="s-label">Last Updated</span>',
         f'<span class="s-value small">{esc(updated_str)}</span></div>',
         "</div>",
