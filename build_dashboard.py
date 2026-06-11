@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read the latest h2h match odds from odds.db and write index.html."""
+"""Build the 2026 World Cup Watchability Dashboard and write index.html."""
 
 import math
 import random
@@ -1108,12 +1108,12 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
         "<head>",
         '<meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-        "<title>2026 FIFA World Cup &mdash; Match Odds Dashboard</title>",
+        "<title>2026 FIFA World Cup &mdash; Watchability Dashboard</title>",
         f"<style>{CSS}</style>",
         "</head><body>",
         "<header>",
-        "<h1>&#9917; 2026 FIFA World Cup <span>&mdash; Match Odds</span></h1>",
-        '<p class="subtitle">Group Stage Dashboard &bull; h2h win probabilities averaged across US bookmakers &bull; Updated daily</p>',
+        "<h1>&#9917; 2026 FIFA World Cup <span>&mdash; Watchability</span></h1>",
+        '<p class="subtitle">Group Stage Dashboard &bull; Watchability scores powered by bookmaker odds &bull; Updated daily</p>',
         "</header>",
         '<div class="summary-strip">',
         '<div class="summary-item"><span class="s-label">Game of the Day</span>',
@@ -1144,14 +1144,14 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
         "</div>",
         '<div class="sidebar-col">',
         '<div class="section-label">Group Standings &mdash; Monte Carlo Simulator</div>',
-        '<p class="mc-sim-note">Simulated using 10,000 runs per group. Completed results are fixed; remaining games use bookmaker h2h odds.</p>',
+        '<p class="mc-sim-note">Simulated using 10,000 runs per group. Completed results are fixed; remaining games use bookmaker odds.</p>',
         '<div class="gs-panel">',
         "".join(gs),
         "</div></div>",
         "</div>",
         "<footer><p>Odds from "
         '<a href="https://the-odds-api.com" target="_blank" rel="noopener">The Odds API</a>'
-        " &bull; Vig removed &bull; Probabilities averaged across available US bookmakers</p></footer>",
+        " &bull; Vig removed &bull; Win probabilities averaged across US bookmakers</p></footer>",
         "<script>",
         "(function(){",
         "var s=document.getElementById('schedule-content');",
