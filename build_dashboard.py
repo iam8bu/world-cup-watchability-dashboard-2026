@@ -2,8 +2,10 @@
 """Read the latest h2h match odds from odds.db and write index.html."""
 
 import math
+import random
 import sqlite3
 import os
+import time
 from html import escape as esc
 
 DB_PATH = "odds.db"
@@ -255,7 +257,7 @@ header h1 span { color: var(--blue); }
   align-items: flex-start;
 }
 .schedule-col { flex: 1; min-width: 0; }
-.sidebar-col  { width: 272px; flex-shrink: 0; position: sticky; top: 14px; }
+.sidebar-col  { width: 310px; flex-shrink: 0; position: sticky; top: 14px; }
 .section-label {
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1.4px;
@@ -429,6 +431,66 @@ footer a { color: var(--blue); text-decoration: none; }
 .watch-pending { font-size: 9px; color: var(--amber); margin-left: 2px; }
 .faded { opacity: .42; }
 
+/* ── Monte Carlo group standings ── */
+.mc-sim-note {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.4;
+  font-style: italic;
+}
+.mc-panel-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 9px;
+  color: var(--muted);
+  padding: 6px 11px;
+  border-bottom: 1px solid var(--border);
+}
+.mc-panel-legend span { display: flex; align-items: center; gap: 3px; }
+.mc-team-row {
+  padding: 6px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.mc-team-row:last-child { border-bottom: none; }
+.mc-team-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.mc-flag { font-size: 12px; flex-shrink: 0; }
+.mc-name {
+  font-size: 11px; font-weight: 500;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mc-pts {
+  font-size: 10px; font-weight: 700;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 4px;
+  color: var(--text); font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.mc-seg-bar-wrap {
+  display: flex; height: 8px; border-radius: 3px;
+  overflow: hidden; background: var(--border); margin-bottom: 3px;
+}
+.mc-seg-1st { background: var(--green); }
+.mc-seg-2nd { background: var(--amber); }
+.mc-seg-3rd { background: var(--blue); }
+.mc-seg-out { background: var(--red); }
+.mc-prob-row {
+  display: flex; justify-content: space-between;
+  font-size: 9px; font-variant-numeric: tabular-nums;
+  margin-bottom: 2px;
+}
+.mc-p1 { color: var(--green); }
+.mc-p2 { color: var(--amber); }
+.mc-p3 { color: var(--blue); }
+.mc-p4 { color: var(--red); }
+.mc-champ { font-size: 9px; color: var(--muted); text-align: right; }
+
 /* ── Date chip (visible in watchability sort only) ── */
 .date-chip {
   display: none; font-size: 9px; color: var(--muted);
@@ -555,6 +617,145 @@ def get_title_probs(db_path: str) -> dict:
         conn.close()
 
 
+def get_completed_results(db_path: str) -> dict:
+    """Return {(home, away): {'home_score': int, 'away_score': int}} for completed matches only."""
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path)
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='match_results'"
+        ).fetchone()
+        if not tbl:
+            return {}
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(match_results)").fetchall()]
+        if 'completed' in cols:
+            rows = conn.execute(
+                "SELECT home_team, away_team, home_score, away_score "
+                "FROM match_results WHERE completed = 1"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT home_team, away_team, home_score, away_score FROM match_results"
+            ).fetchall()
+        return {(h, a): {"home_score": hs, "away_score": aws} for h, a, hs, aws in rows}
+    finally:
+        conn.close()
+
+
+def build_groups_data(schedule, groups, odds, completed_results):
+    """
+    Build simulation input data from schedule, groups, odds, and completed results.
+    Returns (groups_data, missing_odds_matches, current_actual_points).
+    """
+    current_actual_points = {t: 0 for grp_teams in groups.values() for t in grp_teams}
+
+    for (home, away), result in completed_results.items():
+        hs = result["home_score"]
+        aws = result["away_score"]
+        if hs > aws:
+            current_actual_points[home] = current_actual_points.get(home, 0) + 3
+        elif aws > hs:
+            current_actual_points[away] = current_actual_points.get(away, 0) + 3
+        else:
+            current_actual_points[home] = current_actual_points.get(home, 0) + 1
+            current_actual_points[away] = current_actual_points.get(away, 0) + 1
+
+    groups_data = {}
+    missing_odds_matches = []
+
+    for grp, teams in groups.items():
+        fixed_points = {t: current_actual_points.get(t, 0) for t in teams}
+        matches = []
+        for g in schedule:
+            if g["grp"] != grp:
+                continue
+            key = (g["home"], g["away"])
+            if key in completed_results:
+                continue
+            o = odds.get(key)
+            if o:
+                matches.append({
+                    "home": g["home"],
+                    "away": g["away"],
+                    "home_win_prob": o["home_prob"],
+                    "draw_prob": o["draw_prob"],
+                    "away_win_prob": o["away_prob"],
+                })
+            else:
+                matches.append({
+                    "home": g["home"],
+                    "away": g["away"],
+                    "home_win_prob": 1 / 3,
+                    "draw_prob": 1 / 3,
+                    "away_win_prob": 1 / 3,
+                })
+                missing_odds_matches.append(f"{g['home']} vs {g['away']} (Group {grp})")
+        groups_data[grp] = {"teams": teams, "matches": matches, "fixed_points": fixed_points}
+
+    return groups_data, missing_odds_matches, current_actual_points
+
+
+def run_all_simulations(groups_data, n=10000):
+    """
+    Run Monte Carlo simulations for all 12 groups simultaneously.
+    Tracks cross-group best third-place advancement (top 8 of 12 third-place finishers advance).
+    Returns {grp: {team: {1: float, 2: float, 3: float, '3adv': float, 4: float}}}
+    """
+    group_names = list(groups_data.keys())
+    finish_counts = {
+        grp: {t: {1: 0, 2: 0, 3: 0, 4: 0} for t in groups_data[grp]["teams"]}
+        for grp in group_names
+    }
+    third_adv_counts = {
+        grp: {t: 0 for t in groups_data[grp]["teams"]}
+        for grp in group_names
+    }
+
+    for _ in range(n):
+        third_place_info = []
+
+        for grp in group_names:
+            gd = groups_data[grp]
+            teams = gd["teams"]
+            points = {t: gd["fixed_points"].get(t, 0) for t in teams}
+
+            for match in gd["matches"]:
+                result = random.choices(
+                    ["home", "draw", "away"],
+                    weights=[match["home_win_prob"], match["draw_prob"], match["away_win_prob"]],
+                )[0]
+                if result == "home":
+                    points[match["home"]] += 3
+                elif result == "draw":
+                    points[match["home"]] += 1
+                    points[match["away"]] += 1
+                else:
+                    points[match["away"]] += 3
+
+            standings = sorted(
+                teams, key=lambda t: (points[t], random.random()), reverse=True
+            )
+            for pos, team in enumerate(standings, 1):
+                finish_counts[grp][team][pos] += 1
+
+            third_team = standings[2]
+            third_place_info.append((points[third_team], random.random(), grp, third_team))
+
+        third_place_info.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        for _, _, grp, team in third_place_info[:8]:
+            third_adv_counts[grp][team] += 1
+
+    results = {}
+    for grp in group_names:
+        results[grp] = {}
+        for team in groups_data[grp]["teams"]:
+            probs = {pos: finish_counts[grp][team][pos] / n for pos in [1, 2, 3, 4]}
+            probs["3adv"] = third_adv_counts[grp][team] / n
+            results[grp][team] = probs
+    return results
+
+
 def team_expected_wins(team: str, odds: dict):
     """Sum of win probabilities across all group games with available odds (0–3 scale)."""
     total = 0.0
@@ -577,7 +778,8 @@ def team_expected_wins(team: str, odds: dict):
 # HTML builder
 # ---------------------------------------------------------------------------
 
-def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict = None) -> str:
+def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict = None,
+               sim_results: dict = None, current_actual_points: dict = None) -> str:
     if results is None:
         results = {}
     if title_probs is None:
@@ -851,29 +1053,83 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
                 )
         sched.append('</div></div>')
 
-    # ---- group standings HTML ----
+    # ---- group standings HTML (Monte Carlo) ----
     gs = []
+    gs.append(
+        '<div class="mc-panel-legend">'
+        '<span><span class="dot green"></span>1st</span>'
+        '<span><span class="dot amber"></span>2nd</span>'
+        '<span><span class="dot" style="background:var(--blue)"></span>3rd (may adv.)</span>'
+        '<span><span class="dot red"></span>Out</span>'
+        '</div>'
+    )
     for grp, teams in GROUPS.items():
-        ranked = sorted(
-            [(t, team_expected_wins(t, odds)) for t in teams],
-            key=lambda x: -(x[1] if x[1] is not None else -1),
-        )
-        best = max((p for _, p in ranked if p is not None), default=None)
-
         gs.append(f'<div class="gs-group"><div class="gs-title">Group {esc(grp)}</div>')
-        for team, xw in ranked:
-            bar_w = int((xw / best) * 100) if xw is not None and best else 0
-            gs.append(
-                f'<div class="gs-row">'
-                f'<span class="gs-flag">{flag(team)}</span>'
-                f'<div class="gs-name-wrap">'
-                f'<span class="gs-name">{esc(team)}</span>'
-                f'<div class="gs-bar-track">'
-                f'<div class="gs-bar-fill" style="width:{bar_w}%"></div>'
-                f'</div></div>'
-                f'<span class="gs-pct">{f"{xw:.2f}" if xw is not None else "—"}</span>'
-                f'</div>'
+
+        if sim_results and grp in sim_results:
+            grp_sim = sim_results[grp]
+            sorted_teams = sorted(
+                teams,
+                key=lambda t: grp_sim[t][1] + grp_sim[t][2],
+                reverse=True,
             )
+            for team in sorted_teams:
+                probs = grp_sim[team]
+                p1, p2, p3, p4 = probs[1], probs[2], probs[3], probs[4]
+                pts = (current_actual_points or {}).get(team, 0)
+                tp = title_probs.get(team)
+
+                w1 = f"{p1 * 100:.1f}"
+                w2 = f"{p2 * 100:.1f}"
+                w3 = f"{p3 * 100:.1f}"
+                w4 = f"{max(0.0, p4 * 100):.1f}"
+
+                champ_html = (
+                    f'<div class="mc-champ">{tp * 100:.1f}% title odds</div>'
+                    if tp is not None else ""
+                )
+                gs.append(
+                    f'<div class="mc-team-row">'
+                    f'<div class="mc-team-info">'
+                    f'<span class="mc-flag">{flag(team)}</span>'
+                    f'<span class="mc-name">{esc(team)}</span>'
+                    f'<span class="mc-pts">{pts}pt{"s" if pts != 1 else ""}</span>'
+                    f'</div>'
+                    f'<div class="mc-seg-bar-wrap">'
+                    f'<div class="mc-seg-1st" style="width:{w1}%"></div>'
+                    f'<div class="mc-seg-2nd" style="width:{w2}%"></div>'
+                    f'<div class="mc-seg-3rd" style="width:{w3}%"></div>'
+                    f'<div class="mc-seg-out" style="width:{w4}%"></div>'
+                    f'</div>'
+                    f'<div class="mc-prob-row">'
+                    f'<span class="mc-p1">1st&nbsp;{p1 * 100:.0f}%</span>'
+                    f'<span class="mc-p2">2nd&nbsp;{p2 * 100:.0f}%</span>'
+                    f'<span class="mc-p3">3rd&nbsp;{p3 * 100:.0f}%</span>'
+                    f'<span class="mc-p4">out&nbsp;{p4 * 100:.0f}%</span>'
+                    f'</div>'
+                    + champ_html +
+                    f'</div>'
+                )
+        else:
+            ranked = sorted(
+                [(t, team_expected_wins(t, odds)) for t in teams],
+                key=lambda x: -(x[1] if x[1] is not None else -1),
+            )
+            best = max((p for _, p in ranked if p is not None), default=None)
+            for team, xw in ranked:
+                bar_w = int((xw / best) * 100) if xw is not None and best else 0
+                gs.append(
+                    f'<div class="gs-row">'
+                    f'<span class="gs-flag">{flag(team)}</span>'
+                    f'<div class="gs-name-wrap">'
+                    f'<span class="gs-name">{esc(team)}</span>'
+                    f'<div class="gs-bar-track">'
+                    f'<div class="gs-bar-fill" style="width:{bar_w}%"></div>'
+                    f'</div></div>'
+                    f'<span class="gs-pct">{f"{xw:.2f}" if xw is not None else "—"}</span>'
+                    f'</div>'
+                )
+
         gs.append('</div>')
 
     # ---- assemble ----
@@ -918,7 +1174,8 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
         "</div>",
         "</div>",
         '<div class="sidebar-col">',
-        '<div class="section-label">Group Standings &mdash; Expected Wins</div>',
+        '<div class="section-label">Group Standings &mdash; Monte Carlo Simulator</div>',
+        '<p class="mc-sim-note">Simulated using 10,000 runs per group. Completed results are fixed; remaining games use bookmaker h2h odds.</p>',
         '<div class="gs-panel">',
         "".join(gs),
         "</div></div>",
@@ -958,11 +1215,25 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
 def main() -> None:
     odds, fetched_at = get_odds(DB_PATH)
     results = get_results(DB_PATH)
+    completed_results = get_completed_results(DB_PATH)
     title_probs = get_title_probs(DB_PATH)
     if not odds:
         print("WARNING: No match odds in DB — generating skeleton dashboard.")
 
-    html = build_html(odds, fetched_at, results, title_probs)
+    t0 = time.time()
+    groups_data, missing_odds, current_actual_points = build_groups_data(
+        SCHEDULE, GROUPS, odds, completed_results
+    )
+    sim_results = run_all_simulations(groups_data, n=10000)
+    elapsed = time.time() - t0
+    print(f"Monte Carlo simulation complete ({elapsed:.1f}s, {len(missing_odds)} matches missing odds)")
+    if missing_odds:
+        for m in missing_odds[:5]:
+            print(f"  Using 33/33/33 for: {m}")
+        if len(missing_odds) > 5:
+            print(f"  ... and {len(missing_odds) - 5} more")
+
+    html = build_html(odds, fetched_at, results, title_probs, sim_results, current_actual_points)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
