@@ -429,7 +429,7 @@ footer a:hover { text-decoration: underline; }
 
 /* ── Responsive ── */
 @media (max-width: 960px) {
-  .main-layout  { flex-direction: column; gap: 14px; }
+  .main-layout  { flex-direction: column; align-items: stretch; gap: 14px; }
   .sidebar-col  { width: 100%; position: static; }
   .gs-panel     { max-height: none; }
 }
@@ -467,12 +467,19 @@ footer a:hover { text-decoration: underline; }
   .legend-bar::-webkit-scrollbar { display: none; }
 
   /* Main layout */
-  .main-layout { padding: 14px 10px 36px; gap: 12px; }
+  .main-layout  { padding: 14px 0 36px; gap: 12px; }
+  .schedule-col { padding: 0; }          /* no outer padding — cards go edge-to-edge */
+  .sidebar-col  { padding: 0 10px; }
 
-  /* Cards */
-  .games-grid { grid-template-columns: 1fr; gap: 8px; }
-  .game-card  { padding: 11px 12px 9px; border-radius: 8px; }
-  .game-card:hover { transform: none; }   /* disable lift on touch */
+  /* Re-add padding only to non-card elements */
+  .sort-toggle   { padding: 0 10px; }
+  .section-label { padding-left: 10px; }
+  .date-header   { padding-left: 10px; padding-right: 10px; }
+
+  /* Cards — full screen width, no margins needed */
+  .games-grid { grid-template-columns: 1fr; gap: 6px; margin: 0; }
+  .game-card  { padding: 11px 12px 9px; border-radius: 6px; }
+  .game-card:hover { transform: none; }
 
   /* Bigger touch targets for sort buttons */
   .sort-btn    { padding: 9px 16px; font-size: 12px; }
