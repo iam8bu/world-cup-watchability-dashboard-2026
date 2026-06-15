@@ -97,34 +97,41 @@ _ET = datetime.timezone(datetime.timedelta(hours=-4))
 
 
 def get_schedule(db_path: str) -> list:
-    """Return schedule from DB commence_time when available, else hardcoded fallback."""
+    """Return all games: upcoming from match_odds (API commence_time), completed from match_results."""
     try:
         conn = sqlite3.connect(db_path)
-        rows = conn.execute(
+        time_rows = conn.execute(
             "SELECT home_team, away_team, MIN(commence_time) AS ct "
             "FROM match_odds WHERE commence_time IS NOT NULL "
-            "GROUP BY home_team, away_team ORDER BY ct"
+            "GROUP BY home_team, away_team"
         ).fetchall()
+        completed_pairs = set(conn.execute(
+            "SELECT home_team, away_team FROM match_results"
+        ).fetchall())
         conn.close()
+        time_map = {(h, a): ct for h, a, ct in time_rows}
     except Exception:
-        rows = []
+        time_map = {}
+        completed_pairs = set()
 
-    if not rows:
+    if not time_map:
         return list(_SCHEDULE_FALLBACK)
 
     schedule = []
-    for home, away, ct in rows:
-        dt = datetime.datetime.fromisoformat(ct.replace("Z", "+00:00")).astimezone(_ET)
-        h = dt.hour % 12 or 12
-        ampm = "AM" if dt.hour < 12 else "PM"
-        schedule.append({
-            "date":  f"{dt.strftime('%a, %b')} {dt.day}",
-            "time":  f"{h}:{dt.minute:02d} {ampm} ET",
-            "grp":   _GROUP_MAP.get(home, "?"),
-            "home":  home,
-            "away":  away,
-            "venue": _VENUE_MAP.get((home, away), ""),
-        })
+    for g in _SCHEDULE_FALLBACK:
+        pair = (g["home"], g["away"])
+        ct = time_map.get(pair)
+        if ct:
+            dt = datetime.datetime.fromisoformat(ct.replace("Z", "+00:00")).astimezone(_ET)
+            h = dt.hour % 12 or 12
+            ampm = "AM" if dt.hour < 12 else "PM"
+            schedule.append({**g,
+                "date": f"{dt.strftime('%a, %b')} {dt.day}",
+                "time": f"{h}:{dt.minute:02d} {ampm} ET",
+            })
+        elif pair in completed_pairs:
+            # Completed game no longer in odds feed — keep hardcoded date/time
+            schedule.append(g)
     return schedule
 
 
@@ -954,9 +961,9 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
             if g["date"] == today_fmt and (g["home"], g["away"]) in odds
         ]
         if today_with_odds:
-            best_g, best_o = min(
+            best_g, best_o = max(
                 today_with_odds,
-                key=lambda x: max(x[1]["home_prob"], x[1]["away_prob"]),
+                key=lambda x: watchability.get((x[0]["home"], x[0]["away"]), 0) or 0,
             )
             gotd_matchup = f'{esc(best_g["home"])} vs {esc(best_g["away"])}'
             gotd_time = best_g["time"]
@@ -967,9 +974,8 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
 
     if fetched_at:
         try:
-            from datetime import datetime, timezone
             from zoneinfo import ZoneInfo
-            dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+            dt = datetime.datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
             et = dt.astimezone(ZoneInfo("America/New_York"))
             tz_label = "EDT" if et.dst() else "EST"
             time_str = et.strftime("%I:%M %p").lstrip("0")
