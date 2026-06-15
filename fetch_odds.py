@@ -107,16 +107,22 @@ def american_to_implied(odds: int) -> float:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS match_odds (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_id    TEXT NOT NULL,
-            home_team   TEXT NOT NULL,
-            away_team   TEXT NOT NULL,
-            home_prob   REAL NOT NULL,
-            draw_prob   REAL NOT NULL,
-            away_prob   REAL NOT NULL,
-            fetched_at  TEXT NOT NULL
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id      TEXT NOT NULL,
+            home_team     TEXT NOT NULL,
+            away_team     TEXT NOT NULL,
+            home_prob     REAL NOT NULL,
+            draw_prob     REAL NOT NULL,
+            away_prob     REAL NOT NULL,
+            fetched_at    TEXT NOT NULL,
+            commence_time TEXT
         )
     """)
+    try:
+        conn.execute("ALTER TABLE match_odds ADD COLUMN commence_time TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS match_results (
             event_id    TEXT PRIMARY KEY,
@@ -203,7 +209,8 @@ def fetch_and_store(api_key: str, db_path: str = "odds.db") -> None:
         draw_norm = draw_avg / total
         away_norm = away_avg / total
 
-        rows.append((event_id, home, away, home_norm, draw_norm, away_norm, fetched_at))
+        commence_time = event.get("commence_time")
+        rows.append((event_id, home, away, home_norm, draw_norm, away_norm, fetched_at, commence_time))
         print(
             f"  {home:<22} vs {away:<22}  "
             f"{home_norm*100:5.1f}% / {draw_norm*100:5.1f}% / {away_norm*100:5.1f}%"
@@ -218,8 +225,8 @@ def fetch_and_store(api_key: str, db_path: str = "odds.db") -> None:
         init_db(conn)
         conn.executemany(
             "INSERT INTO match_odds "
-            "(event_id, home_team, away_team, home_prob, draw_prob, away_prob, fetched_at) "
-            "VALUES (?,?,?,?,?,?,?)",
+            "(event_id, home_team, away_team, home_prob, draw_prob, away_prob, fetched_at, commence_time) "
+            "VALUES (?,?,?,?,?,?,?,?)",
             rows,
         )
         conn.commit()

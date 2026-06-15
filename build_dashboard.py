@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build the 2026 World Cup Watchability Dashboard and write index.html."""
 
+import datetime
 import math
 import random
 import sqlite3
@@ -12,9 +13,9 @@ DB_PATH = "odds.db"
 OUT_PATH = "index.html"
 
 # ---------------------------------------------------------------------------
-# Schedule — 72 group-stage games
+# Schedule — fallback hardcoded list; dates/times replaced by API once available
 # ---------------------------------------------------------------------------
-SCHEDULE = [
+_SCHEDULE_FALLBACK = [
     {"date": "Thu, Jun 11", "grp": "A", "home": "Mexico",            "away": "South Africa",     "time": "3:00 PM ET",   "venue": "Estadio Azteca, Mexico City"},
     {"date": "Thu, Jun 11", "grp": "A", "home": "South Korea",       "away": "Czechia",           "time": "10:00 PM ET",  "venue": "Estadio Akron, Guadalajara"},
     {"date": "Fri, Jun 12", "grp": "B", "home": "Canada",            "away": "Bosnia-Herzegovina","time": "3:00 PM ET",   "venue": "BMO Field, Toronto"},
@@ -88,6 +89,44 @@ SCHEDULE = [
     {"date": "Sat, Jun 27", "grp": "J", "home": "Jordan",            "away": "Argentina",         "time": "10:00 PM ET",  "venue": "AT&T Stadium, Arlington"},
     {"date": "Sat, Jun 27", "grp": "J", "home": "Algeria",           "away": "Austria",           "time": "10:00 PM ET",  "venue": "Arrowhead Stadium, Kansas City"},
 ]
+
+_VENUE_MAP = {(g["home"], g["away"]): g["venue"] for g in _SCHEDULE_FALLBACK}
+_GROUP_MAP  = {team: g["grp"] for g in _SCHEDULE_FALLBACK for team in (g["home"], g["away"])}
+
+_ET = datetime.timezone(datetime.timedelta(hours=-4))
+
+
+def get_schedule(db_path: str) -> list:
+    """Return schedule from DB commence_time when available, else hardcoded fallback."""
+    try:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute(
+            "SELECT home_team, away_team, MIN(commence_time) AS ct "
+            "FROM match_odds WHERE commence_time IS NOT NULL "
+            "GROUP BY home_team, away_team ORDER BY ct"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        rows = []
+
+    if not rows:
+        return list(_SCHEDULE_FALLBACK)
+
+    schedule = []
+    for home, away, ct in rows:
+        dt = datetime.datetime.fromisoformat(ct.replace("Z", "+00:00")).astimezone(_ET)
+        h = dt.hour % 12 or 12
+        ampm = "AM" if dt.hour < 12 else "PM"
+        schedule.append({
+            "date":  f"{dt.strftime('%a, %b')} {dt.day}",
+            "time":  f"{h}:{dt.minute:02d} {ampm} ET",
+            "grp":   _GROUP_MAP.get(home, "?"),
+            "home":  home,
+            "away":  away,
+            "venue": _VENUE_MAP.get((home, away), ""),
+        })
+    return schedule
+
 
 GROUPS = {
     "A": ["Mexico", "South Africa", "South Korea", "Czechia"],
@@ -828,11 +867,13 @@ def run_all_simulations(groups_data, n=10000):
     return results
 
 
-def team_expected_wins(team: str, odds: dict):
+def team_expected_wins(team: str, odds: dict, schedule: list = None):
     """Sum of win probabilities across all group games with available odds (0–3 scale)."""
+    if schedule is None:
+        schedule = _SCHEDULE_FALLBACK
     total = 0.0
     found = 0
-    for g in SCHEDULE:
+    for g in schedule:
         if g["home"] == team:
             o = odds.get((g["home"], g["away"]))
             if o:
@@ -850,8 +891,10 @@ def team_expected_wins(team: str, odds: dict):
 # HTML builder
 # ---------------------------------------------------------------------------
 
-def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict = None,
+def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = None, title_probs: dict = None,
                sim_results: dict = None, current_actual_points: dict = None) -> str:
+    if schedule is None:
+        schedule = _SCHEDULE_FALLBACK
     if results is None:
         results = {}
     if title_probs is None:
@@ -872,7 +915,7 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
     ref = (baseline ** 2) / ceiling
 
     watchability: dict = {}
-    for g in SCHEDULE:
+    for g in schedule:
         key = (g["home"], g["away"])
         o = odds.get(key)
         if not o:
@@ -893,22 +936,21 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
 
     # ---- schedule ----
     date_games: dict = {}
-    for g in SCHEDULE:
+    for g in schedule:
         date_games.setdefault(g["date"], []).append(g)
 
-    games_with_odds = sum(1 for g in SCHEDULE if (g["home"], g["away"]) in odds)
+    games_with_odds = sum(1 for g in schedule if (g["home"], g["away"]) in odds)
 
     # ---- game of the day (most competitive match today in ET) ----
     gotd_matchup = "No games today"
     gotd_time = ""
     try:
-        from datetime import datetime
         from zoneinfo import ZoneInfo
-        today_et = datetime.now(ZoneInfo("America/New_York"))
+        today_et = datetime.datetime.now(ZoneInfo("America/New_York"))
         today_fmt = today_et.strftime("%a, %b ") + str(today_et.day)
         today_with_odds = [
             (g, odds[(g["home"], g["away"])])
-            for g in SCHEDULE
+            for g in schedule
             if g["date"] == today_fmt and (g["home"], g["away"]) in odds
         ]
         if today_with_odds:
@@ -918,7 +960,7 @@ def build_html(odds: dict, fetched_at, results: dict = None, title_probs: dict =
             )
             gotd_matchup = f'{esc(best_g["home"])} vs {esc(best_g["away"])}'
             gotd_time = best_g["time"]
-        elif any(g["date"] == today_fmt for g in SCHEDULE):
+        elif any(g["date"] == today_fmt for g in schedule):
             gotd_matchup = "Odds pending"
     except Exception:
         pass
@@ -1292,12 +1334,13 @@ def main() -> None:
     results = get_results(DB_PATH)
     completed_results = get_completed_results(DB_PATH)
     title_probs = get_title_probs(DB_PATH)
+    schedule = get_schedule(DB_PATH)
     if not odds:
         print("WARNING: No match odds in DB — generating skeleton dashboard.")
 
     t0 = time.time()
     groups_data, missing_odds, current_actual_points = build_groups_data(
-        SCHEDULE, GROUPS, odds, completed_results
+        schedule, GROUPS, odds, completed_results
     )
     sim_results = run_all_simulations(groups_data, n=10000)
     elapsed = time.time() - t0
@@ -1308,7 +1351,7 @@ def main() -> None:
         if len(missing_odds) > 5:
             print(f"  ... and {len(missing_odds) - 5} more")
 
-    html = build_html(odds, fetched_at, results, title_probs, sim_results, current_actual_points)
+    html = build_html(odds, fetched_at, schedule, results, title_probs, sim_results, current_actual_points)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
