@@ -307,7 +307,7 @@ header h1 span { color: var(--blue); }
 .legend-bar span { display: flex; align-items: center; gap: 5px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot.green { background: var(--green); }
-.dot.blue  { background: var(--blue);  }
+.dot.gray  { background: var(--muted); }
 .dot.amber { background: var(--amber); }
 .dot.red   { background: var(--red);   }
 
@@ -372,7 +372,7 @@ header h1 span { color: var(--blue); }
 .seg-bar-wrap { display: flex; height: 6px; border-radius: 4px; overflow: hidden; margin: 9px 0 7px; background: var(--border); }
 .seg-home { background: var(--blue); }
 .seg-draw { background: var(--draw); }
-.seg-away { background: rgba(47,129,247,.45); }
+.seg-away { background: var(--orange); }
 
 .prob-labels {
   display: flex;
@@ -384,7 +384,7 @@ header h1 span { color: var(--blue); }
 }
 .prob-label-home { color: var(--blue); }
 .prob-label-draw { color: var(--draw); text-align: center; }
-.prob-label-away { color: #93c5fd; text-align: right; }
+.prob-label-away { color: var(--orange); text-align: right; }
 .no-odds-msg {
   font-size: 11px;
   color: var(--muted);
@@ -393,17 +393,14 @@ header h1 span { color: var(--blue); }
   padding: 8px 0 6px;
 }
 .venue-row { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
-.lev-badge {
-  font-size: 9px; font-weight: 600;
-  color: var(--muted); background: var(--surface2);
-  border: 1px solid var(--border); border-radius: 4px;
-  padding: 1px 6px; letter-spacing: .3px; white-space: nowrap;
-}
-.spi-score-line {
-  font-size: 10px; color: var(--muted);
-  margin: 2px 0 4px;
-  font-variant-numeric: tabular-nums;
-}
+.game-card { cursor: pointer; }
+.watch-detail { display: none; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 7px; }
+.game-card.expanded .watch-detail { display: block; }
+.wd-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 10px; }
+.wd-label { color: var(--muted); width: 72px; flex-shrink: 0; }
+.wd-track { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.wd-fill  { height: 100%; border-radius: 2px; background: var(--green); }
+.wd-val   { color: var(--text); font-weight: 600; width: 26px; text-align: right; flex-shrink: 0; }
 
 /* ── Group standings sidebar ── */
 .gs-panel {
@@ -728,7 +725,7 @@ def watch_cls(w) -> str:
     if w >= 75:
         return "green"
     if w >= 60:
-        return "blue"
+        return "gray"
     return "red"
 
 
@@ -1002,11 +999,16 @@ def abbrev(name: str) -> str:
     return _ABBREV.get(name, name[:3].upper())
 
 
-def watchability_score(home: str, away: str) -> int:
+def watchability_score(home: str, away: str) -> dict:
     closeness  = get_closeness(home, away)
     importance = get_importance(home, away)
     quality    = get_quality(home, away)
-    return round(((closeness + importance + quality) / 3) * 100)
+    return {
+        "score":      round(((closeness + importance + quality) / 3) * 100),
+        "closeness":  round(closeness  * 100),
+        "importance": round(importance * 100),
+        "quality":    round(quality    * 100),
+    }
 
 
 def build_tournament_tab() -> str:
@@ -1250,7 +1252,7 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         if today_with_odds:
             best_g, best_o = max(
                 today_with_odds,
-                key=lambda x: watchability.get((x[0]["home"], x[0]["away"]), 0) or 0,
+                key=lambda x: (watchability.get((x[0]["home"], x[0]["away"])) or {}).get("score", 0),
             )
             gotd_matchup = f'{esc(best_g["home"])} vs {esc(best_g["away"])}'
             gotd_time = best_g["time"]
@@ -1288,7 +1290,8 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
             hp = o["home_prob"] if o else None
             dp = o["draw_prob"] if o else None
             ap = o["away_prob"] if o else None
-            w = watchability.get(game_key)
+            w_data = watchability.get(game_key)
+            w = w_data["score"] if w_data else None
             data_w = str(w) if w is not None else ""
             card_cls = watch_cls(w)
             watch_score_str = str(w) if w is not None else "—"
@@ -1370,33 +1373,13 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                         f'<span class="prob-label-away">{esc(abbrev(g["away"]))}&nbsp;{aw_pct}%</span>'
                         f'</div>'
                     )
-                    mu_h = pred.get("mu_home")
-                    mu_a = pred.get("mu_away")
-                    ml_score = pred.get("most_likely_score") or ""
-                    if mu_h is not None and mu_a is not None and ml_score:
-                        spi_score_html = (
-                            f'<div class="spi-score-line">'
-                            f'Most likely: {esc(ml_score)}'
-                            f'&nbsp;&nbsp;|&nbsp;&nbsp;xG:&nbsp;{mu_h:.1f}&thinsp;&mdash;&thinsp;{mu_a:.1f}'
-                            f'</div>'
-                        )
-                    else:
-                        spi_score_html = ""
                 else:
                     prob_html = '<div class="no-odds-msg">Model pending</div>'
-                    spi_score_html = ""
-
-                lev = get_leverage(g["home"], g["away"])
-                if lev is not None and lev > 0:
-                    lev_badge = f'<span class="lev-badge">&#9889; Leverage {lev:.3f}</span>'
-                else:
-                    lev_badge = ""
 
                 sched.append(
                     f'<div class="game-card {card_cls}" data-w="{data_w}" data-date="{esc(g["date"])}">'
                     f'<div class="card-top">'
                     f'<span class="grp-badge">GRP {esc(g["grp"])}</span>'
-                    + lev_badge +
                     f'<span class="date-chip">{esc(g["date"])}</span>'
                     f'<span class="card-time">{esc(g["time"])}</span>'
                     f'</div>'
@@ -1423,8 +1406,21 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'</div>'
                     f'</div>'
                     + prob_html +
-                    spi_score_html +
                     f'<div class="venue-row">{esc(g["venue"])}</div>'
+                    + (
+                        f'<div class="watch-detail">'
+                        f'<div class="wd-row"><span class="wd-label">Closeness</span>'
+                        f'<div class="wd-track"><div class="wd-fill" style="width:{w_data["closeness"]}%"></div></div>'
+                        f'<span class="wd-val">{w_data["closeness"]}</span></div>'
+                        f'<div class="wd-row"><span class="wd-label">Importance</span>'
+                        f'<div class="wd-track"><div class="wd-fill" style="width:{w_data["importance"]}%"></div></div>'
+                        f'<span class="wd-val">{w_data["importance"]}</span></div>'
+                        f'<div class="wd-row"><span class="wd-label">Quality</span>'
+                        f'<div class="wd-track"><div class="wd-fill" style="width:{w_data["quality"]}%"></div></div>'
+                        f'<span class="wd-val">{w_data["quality"]}</span></div>'
+                        f'</div>'
+                        if w_data else ''
+                    ) +
                     f'</div>'
                 )
         sched.append('</div></div>')
@@ -1516,11 +1512,11 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         "</div>",
         '<div class="legend-bar">',
         '<span><span class="dot green"></span>High watchability (&ge;75)</span>',
-        '<span><span class="dot blue"></span>Good watchability (60&ndash;74)</span>',
+        '<span><span class="dot gray"></span>Watchable (60&ndash;74)</span>',
         '<span><span class="dot red"></span>Lower watchability (&lt;60)</span>',
         '<span style="color:#2f81f7">&#9632;</span><span>Home win</span>',
         '<span style="color:#6e7681">&#9632;</span><span>Draw</span>',
-        '<span style="color:#93c5fd">&#9632;</span><span>Away win</span>',
+        '<span style="color:var(--orange)">&#9632;</span><span>Away win</span>',
         "</div>",
         '<div class="tab-bar">',
         '<button class="tab-btn tab-active" onclick="showTab(\'schedule\')">Daily Schedule</button>',
@@ -1600,6 +1596,9 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         "cards.forEach(function(c){g.appendChild(c);});",
         "s.innerHTML='';s.appendChild(g);",
         "}};})();",
+        "document.querySelectorAll('.game-card').forEach(function(card){",
+        "  card.addEventListener('click',function(){card.classList.toggle('expanded');});",
+        "});",
         "</script>",
         "</body></html>",
     ]
