@@ -23,12 +23,17 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests scipy statsmodels pandas numpy
 
       - name: Fetch latest odds
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python fetch_odds.py
+
+      - name: Update SPI ratings and tournament simulation
+        run: python spi_model.py
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
       - name: Commit and push changes
         run: |
@@ -39,6 +44,6 @@ jobs:
           git pull --rebase origin main
           cp /tmp/fresh_odds.db odds.db
           python build_dashboard.py
-          git add index.html odds.db
+          git add index.html odds.db spi_ratings.db
           git diff --cached --quiet || git commit -m "chore: update odds $(date -u '+%Y-%m-%d')"
           git push

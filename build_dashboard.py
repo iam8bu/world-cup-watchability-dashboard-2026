@@ -224,6 +224,8 @@ CSS = """
   --amber-dim: rgba(210,153,34,.09);
   --amber-bdr: rgba(210,153,34,.28);
   --red:       #f85149;
+  --blue-dim:  rgba(47,129,247,.09);
+  --blue-bdr:  rgba(47,129,247,.28);
   --red-dim:   rgba(248,81,73,.07);
   --red-bdr:   rgba(248,81,73,.22);
   --gray-dim:  rgba(110,118,129,.07);
@@ -305,20 +307,12 @@ header h1 span { color: var(--blue); }
 .legend-bar span { display: flex; align-items: center; gap: 5px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot.green { background: var(--green); }
+.dot.blue  { background: var(--blue);  }
 .dot.amber { background: var(--amber); }
 .dot.red   { background: var(--red);   }
 
-/* ── Main layout ── */
-.main-layout {
-  display: flex;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 22px 14px 48px;
-  gap: 18px;
-  align-items: flex-start;
-}
-.schedule-col { flex: 1; min-width: 0; }
-.sidebar-col  { width: 310px; flex-shrink: 0; position: sticky; top: 14px; }
+/* ── Schedule layout ── */
+.schedule-wrap { max-width: 1440px; margin: 0 auto; padding: 22px 14px 48px; }
 .section-label {
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1.4px;
@@ -348,6 +342,7 @@ header h1 span { color: var(--blue); }
 .game-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 .game-card.green { border-left-color: var(--green); background: var(--green-dim); border-color: var(--green-bdr); }
 .game-card.amber { border-left-color: var(--amber); background: var(--amber-dim); border-color: var(--amber-bdr); }
+.game-card.blue  { border-left-color: var(--blue);  background: var(--blue-dim);  border-color: var(--blue-bdr);  }
 .game-card.red   { border-left-color: var(--red);   background: var(--red-dim);   border-color: var(--red-bdr);   }
 .game-card.gray  { border-left-color: #30363d;       background: var(--gray-dim);  border-color: var(--gray-bdr);  }
 
@@ -377,7 +372,7 @@ header h1 span { color: var(--blue); }
 .seg-bar-wrap { display: flex; height: 6px; border-radius: 4px; overflow: hidden; margin: 9px 0 7px; background: var(--border); }
 .seg-home { background: var(--blue); }
 .seg-draw { background: var(--draw); }
-.seg-away { background: var(--orange); }
+.seg-away { background: rgba(47,129,247,.45); }
 
 .prob-labels {
   display: flex;
@@ -389,7 +384,7 @@ header h1 span { color: var(--blue); }
 }
 .prob-label-home { color: var(--blue); }
 .prob-label-draw { color: var(--draw); text-align: center; }
-.prob-label-away { color: var(--orange); text-align: right; }
+.prob-label-away { color: #93c5fd; text-align: right; }
 .no-odds-msg {
   font-size: 11px;
   color: var(--muted);
@@ -398,6 +393,17 @@ header h1 span { color: var(--blue); }
   padding: 8px 0 6px;
 }
 .venue-row { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.lev-badge {
+  font-size: 9px; font-weight: 600;
+  color: var(--muted); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 6px; letter-spacing: .3px; white-space: nowrap;
+}
+.spi-score-line {
+  font-size: 10px; color: var(--muted);
+  margin: 2px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Group standings sidebar ── */
 .gs-panel {
@@ -483,15 +489,13 @@ footer a:hover { text-decoration: underline; }
 
 /* ── Responsive ── */
 @media (max-width: 960px) {
-  .main-layout  { flex-direction: column; align-items: stretch; gap: 14px; }
-  .sidebar-col  { width: 100%; position: static; }
   .gs-panel     { max-height: none; }
 }
 
 /* Tablet (560–960px) */
 @media (max-width: 760px) {
   header { padding: 28px 20px 22px; }
-  .main-layout { padding: 18px 12px 40px; }
+  .schedule-wrap { padding: 18px 12px 40px; }
 }
 
 /* Mobile (≤560px) */
@@ -520,10 +524,8 @@ footer a:hover { text-decoration: underline; }
   }
   .legend-bar::-webkit-scrollbar { display: none; }
 
-  /* Main layout */
-  .main-layout  { padding: 14px 0 36px; gap: 12px; }
-  .schedule-col { padding: 0; }          /* no outer padding — cards go edge-to-edge */
-  .sidebar-col  { padding: 0 10px; }
+  /* Schedule layout */
+  .schedule-wrap { padding: 14px 0 36px; }
 
   /* Re-add padding only to non-card elements */
   .sort-toggle   { padding: 0 10px; }
@@ -551,11 +553,13 @@ footer a:hover { text-decoration: underline; }
 .watch-bar-wrap { flex: 1; height: 4px; background: rgba(255,255,255,.07); border-radius: 2px; overflow: hidden; }
 .watch-bar-fill { height: 100%; border-radius: 2px; transition: width .3s ease; }
 .game-card.green .watch-bar-fill { background: var(--green); }
+.game-card.blue  .watch-bar-fill { background: var(--blue);  }
 .game-card.amber .watch-bar-fill { background: var(--amber); }
 .game-card.red   .watch-bar-fill { background: var(--red); }
 .game-card.gray  .watch-bar-fill { background: var(--muted); opacity: .4; }
 .watch-score { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 22px; text-align: right; }
 .game-card.green .watch-score { color: var(--green); }
+.game-card.blue  .watch-score { color: var(--blue);  }
 .game-card.amber .watch-score { color: var(--amber); }
 .game-card.red   .watch-score { color: var(--red); }
 .game-card.gray  .watch-score { color: var(--muted); }
@@ -627,6 +631,26 @@ footer a:hover { text-decoration: underline; }
 }
 .sort-btn:hover { background: var(--surface2); color: var(--text); }
 .sort-active { background: var(--blue) !important; color: #fff !important; border-color: var(--blue) !important; }
+
+/* ── Tabs ── */
+.tab-bar { display:flex; gap:4px; padding:12px 14px 0; background:var(--surface); border-bottom:1px solid var(--border); }
+.tab-btn { padding:7px 16px; border-radius:6px 6px 0 0; border:1px solid var(--border); border-bottom:none; background:var(--bg); color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:color .12s,background .12s; }
+.tab-btn:hover { color:var(--text); background:var(--surface2); }
+.tab-btn.tab-active { background:var(--surface); color:var(--text); border-bottom:1px solid var(--surface); margin-bottom:-1px; }
+.tab-panel { display:none; }
+.tab-panel.tab-visible { display:block; }
+
+/* ── Tournament table ── */
+.tourn-wrap { max-width:960px; margin:0 auto; padding:20px 14px 48px; }
+.tourn-table { width:100%; border-collapse:collapse; font-size:13px; }
+.tourn-table th { cursor:pointer; padding:6px 8px; text-align:right; border-bottom:2px solid var(--border); color:var(--muted); font-weight:500; white-space:nowrap; user-select:none; }
+.tourn-table th:nth-child(2) { text-align:left; }
+.tourn-table td { padding:5px 8px; text-align:right; border-bottom:1px solid var(--border); font-size:12px; }
+.tourn-table td:nth-child(2) { text-align:left; white-space:nowrap; }
+.tourn-table th.sort-active { color:var(--text); }
+.tourn-table tr:hover td { background:var(--surface2) !important; }
+.tourn-note { font-size:11px; color:var(--muted); margin-top:8px; }
+.pending { font-size:13px; color:var(--muted); padding:2rem 0; text-align:center; }
 """
 
 # ---------------------------------------------------------------------------
@@ -701,10 +725,10 @@ def watch_cls(w) -> str:
     """Card color class based on normalized watchability score."""
     if w is None:
         return "gray"
-    if w >= 60:
+    if w >= 75:
         return "green"
-    if w >= 30:
-        return "amber"
+    if w >= 60:
+        return "blue"
     return "red"
 
 
@@ -712,25 +736,21 @@ def flag(team: str) -> str:
     return FLAGS.get(team, "🏳️")
 
 
-def get_title_probs(db_path: str) -> dict:
-    """Return {team: implied_prob} from the most recent odds_snapshots row per team."""
-    if not os.path.exists(db_path):
-        return {}
-    conn = sqlite3.connect(db_path)
+def get_leaderboard_data():
+    """Return [(team, p_champion, spi_overall), ...] from spi_ratings.db, sorted by p_champion desc."""
+    conn = get_spi_conn()
+    if not conn:
+        return []
     try:
-        tbl = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='odds_snapshots'"
-        ).fetchone()
-        if not tbl:
-            return {}
         rows = conn.execute("""
-            SELECT team, implied_prob FROM odds_snapshots o1
-            WHERE fetched_at = (
-                SELECT MAX(fetched_at) FROM odds_snapshots o2
-                WHERE o2.team = o1.team
-            )
+            SELECT t.team, t.p_champion, r.spi_overall
+            FROM tournament_probs t
+            LEFT JOIN team_ratings r ON t.team = r.team
+            ORDER BY t.p_champion DESC
         """).fetchall()
-        return {team: prob for team, prob in rows}
+        return rows
+    except Exception:
+        return []
     finally:
         conn.close()
 
@@ -759,6 +779,327 @@ def get_completed_results(db_path: str) -> dict:
         return {(h, a): {"home_score": hs, "away_score": aws} for h, a, hs, aws in rows}
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# SPI watchability helpers
+# ---------------------------------------------------------------------------
+
+SPI_DB_PATH = "spi_ratings.db"
+
+
+def get_spi_conn():
+    """Return a raw sqlite3 connection to spi_ratings.db, or None if unavailable."""
+    if not os.path.exists(SPI_DB_PATH):
+        return None
+    return sqlite3.connect(SPI_DB_PATH)
+
+
+def query_spi(sql: str, params=(), write: bool = False):
+    """Execute a query against spi_ratings.db. Returns list of row dicts or None on error."""
+    if not os.path.exists(SPI_DB_PATH):
+        return None
+    try:
+        conn = sqlite3.connect(SPI_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        try:
+            cur = conn.execute(sql, params)
+            if write:
+                conn.commit()
+                return []
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+    except Exception:
+        return None
+
+
+def _ensure_match_predictions() -> None:
+    """Populate match_predictions in spi_ratings.db from stored team_ratings if missing."""
+    if not os.path.exists(SPI_DB_PATH):
+        return
+    try:
+        conn = sqlite3.connect(SPI_DB_PATH)
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS match_predictions (
+                    home_team         TEXT,
+                    away_team         TEXT,
+                    spi_home_win      REAL,
+                    spi_draw          REAL,
+                    spi_away_win      REAL,
+                    mu_home           REAL,
+                    mu_away           REAL,
+                    most_likely_score TEXT,
+                    PRIMARY KEY (home_team, away_team)
+                )
+            """)
+            conn.commit()
+            # Migrate: add any columns that are missing from an older schema
+            existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(match_predictions)").fetchall()}
+            for col, typedef in [("mu_home", "REAL"), ("mu_away", "REAL"), ("most_likely_score", "TEXT")]:
+                if col not in existing_cols:
+                    conn.execute(f"ALTER TABLE match_predictions ADD COLUMN {col} {typedef}")
+            conn.commit()
+            # Only skip if already populated with the extended schema
+            if conn.execute("SELECT COUNT(*) FROM match_predictions WHERE mu_home IS NOT NULL").fetchone()[0] > 0:
+                return
+            rows = conn.execute(
+                "SELECT team, attack_rating, defense_rating FROM team_ratings"
+            ).fetchall()
+            ratings = {t: (ar, dr) for t, ar, dr in rows}
+            params_map = dict(conn.execute(
+                "SELECT param, value FROM model_params"
+            ).fetchall())
+            baseline = math.exp(params_map.get("intercept", 0.0))
+            rho = -0.13
+            k = list(range(11))
+            # Derive unique team lists per group from the fallback schedule
+            teams_by_group: dict = {}
+            for g in _SCHEDULE_FALLBACK:
+                grp = g["grp"]
+                if grp not in teams_by_group:
+                    teams_by_group[grp] = []
+                for t in (g["home"], g["away"]):
+                    if t not in teams_by_group[grp]:
+                        teams_by_group[grp].append(t)
+            from itertools import combinations as _comb
+            inserts = []
+            for grp, teams in teams_by_group.items():
+                for home, away in _comb(teams, 2):
+                    if home not in ratings or away not in ratings:
+                        continue
+                    ar_a, dr_a = ratings[home]
+                    ar_b, dr_b = ratings[away]
+                    mu_a = ar_a * dr_b / baseline
+                    mu_b = ar_b * dr_a / baseline
+                    pa = [math.exp(-mu_a) * mu_a**i / math.factorial(i) for i in k]
+                    pb = [math.exp(-mu_b) * mu_b**j / math.factorial(j) for j in k]
+                    mat = [[pa[i] * pb[j] for j in k] for i in k]
+                    mat[0][0] *= (1 - mu_a * mu_b * rho)
+                    mat[1][0] *= (1 + mu_b * rho)
+                    mat[0][1] *= (1 + mu_a * rho)
+                    mat[1][1] *= (1 - rho)
+                    total = sum(mat[i][j] for i in k for j in k)
+                    if total > 0:
+                        mat = [[mat[i][j] / total for j in k] for i in k]
+                    a_win = sum(mat[i][j] for i in k for j in k if i > j)
+                    draw  = sum(mat[i][j] for i in k for j in k if i == j)
+                    b_win = 1.0 - a_win - draw
+                    # Most likely scoreline
+                    best_i, best_j, best_p = 0, 0, -1.0
+                    for i in k:
+                        for j in k:
+                            if mat[i][j] > best_p:
+                                best_p = mat[i][j]
+                                best_i, best_j = i, j
+                    inserts.append((home, away,
+                                    round(a_win, 4), round(draw, 4), round(b_win, 4),
+                                    round(mu_a, 4), round(mu_b, 4),
+                                    f"{best_i}-{best_j}"))
+            conn.executemany(
+                "INSERT OR REPLACE INTO match_predictions VALUES (?,?,?,?,?,?,?,?)",
+                inserts,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def get_spi_prediction(home: str, away: str):
+    """Return SPI prediction dict or None. Handles flipped table ordering."""
+    sql = ("SELECT spi_home_win, spi_draw, spi_away_win, mu_home, mu_away, most_likely_score "
+           "FROM match_predictions WHERE home_team=? AND away_team=?")
+    rows = query_spi(sql, (home, away))
+    if rows:
+        return rows[0]
+    rows = query_spi(sql, (away, home))
+    if rows:
+        r = rows[0]
+        score = r.get("most_likely_score") or ""
+        if "-" in score:
+            a, b = score.split("-", 1)
+            score = f"{b}-{a}"
+        return {
+            "spi_home_win":      r["spi_away_win"],
+            "spi_draw":          r["spi_draw"],
+            "spi_away_win":      r["spi_home_win"],
+            "mu_home":           r.get("mu_away"),
+            "mu_away":           r.get("mu_home"),
+            "most_likely_score": score,
+        }
+    return None
+
+
+def get_leverage(home: str, away: str):
+    """Return leverage_score for this matchup or None. Handles flipped table ordering."""
+    sql = "SELECT leverage_score FROM game_leverage WHERE home_team=? AND away_team=?"
+    rows = query_spi(sql, (home, away))
+    if rows:
+        return rows[0].get("leverage_score")
+    rows = query_spi(sql, (away, home))
+    if rows:
+        return rows[0].get("leverage_score")
+    return None
+
+
+def get_closeness(home: str, away: str) -> float:
+    pred = get_spi_prediction(home, away)
+    if not pred:
+        return 0.5
+    max_prob = max(pred["spi_home_win"], pred["spi_draw"], pred["spi_away_win"])
+    return 1.0 - ((max_prob - 1/3) / (2/3))
+
+
+def get_importance(home: str, away: str) -> float:
+    lev = get_leverage(home, away)
+    if lev is None:
+        return 0.0
+    max_rows = query_spi("SELECT value FROM model_params WHERE param='max_leverage'")
+    if max_rows:
+        max_lev = max_rows[0]["value"]
+    else:
+        agg = query_spi("SELECT MAX(leverage_score) AS m FROM game_leverage")
+        max_lev = agg[0]["m"] if agg else 0.0
+        if max_lev:
+            query_spi(
+                "INSERT OR REPLACE INTO model_params (param, value) VALUES ('max_leverage', ?)",
+                (max_lev,), write=True
+            )
+    if not max_lev:
+        return 0.0
+    return min(lev / max_lev, 1.0)
+
+
+def get_quality(home: str, away: str) -> float:
+    h_rows = query_spi("SELECT spi_overall FROM team_ratings WHERE team=?", (home,))
+    a_rows = query_spi("SELECT spi_overall FROM team_ratings WHERE team=?", (away,))
+    home_val = h_rows[0]["spi_overall"] if h_rows else 50.0
+    away_val = a_rows[0]["spi_overall"] if a_rows else 50.0
+    top_two  = query_spi(
+        "SELECT spi_overall FROM team_ratings ORDER BY spi_overall DESC LIMIT 2"
+    )
+    max_combined = sum(r["spi_overall"] for r in top_two) if top_two else 200.0
+    return min((home_val + away_val) / max_combined, 1.0)
+
+
+_ABBREV = {
+    "United States":       "USA",
+    "South Korea":         "KOR",
+    "South Africa":        "RSA",
+    "Bosnia-Herzegovina":  "BIH",
+    "Saudi Arabia":        "KSA",
+    "New Zealand":         "NZL",
+    "Cape Verde":          "CPV",
+    "Ivory Coast":         "CIV",
+    "DR Congo":            "DRC",
+}
+
+def abbrev(name: str) -> str:
+    return _ABBREV.get(name, name[:3].upper())
+
+
+def watchability_score(home: str, away: str) -> int:
+    closeness  = get_closeness(home, away)
+    importance = get_importance(home, away)
+    quality    = get_quality(home, away)
+    return round(((closeness + importance + quality) / 3) * 100)
+
+
+def build_tournament_tab() -> str:
+    conn = get_spi_conn()
+    if not conn:
+        return "<p class='pending'>Simulation pending — check back after the next scheduled update.</p>"
+    try:
+        rows = conn.execute("""
+            SELECT t.team, t.p_group_advance, t.p_r16,
+                   t.p_qf, t.p_sf, t.p_final, t.p_champion,
+                   r.spi_overall
+            FROM tournament_probs t
+            LEFT JOIN team_ratings r ON t.team = r.team
+            ORDER BY t.p_champion DESC
+        """).fetchall()
+    except Exception as e:
+        return f"<p class='pending'>Data unavailable.</p>"
+    finally:
+        conn.close()
+
+    if not rows:
+        return "<p class='pending'>Simulation pending.</p>"
+
+    col_keys = ['p_group_advance', 'p_r16', 'p_qf', 'p_sf', 'p_final', 'p_champion']
+    maxes = {c: max((r[i + 1] for r in rows), default=1) or 1 for i, c in enumerate(col_keys)}
+
+    def cell_bg(val, col):
+        if not val:
+            return ''
+        intensity = round((val / maxes[col]) * 0.85, 3)
+        return f'style="background:rgba(34,197,94,{intensity})"'
+
+    header = (
+        '<div class="tourn-wrap">'
+        '<table id="tourn-table" class="tourn-table"><thead><tr>'
+        '<th onclick="sortTourn(0)" data-col="0">#</th>'
+        '<th onclick="sortTourn(1)" data-col="1">Team</th>'
+        '<th onclick="sortTourn(2)" data-col="2">SPI</th>'
+        '<th onclick="sortTourn(3)" data-col="3">Advance</th>'
+        '<th onclick="sortTourn(4)" data-col="4">R16</th>'
+        '<th onclick="sortTourn(5)" data-col="5">QF</th>'
+        '<th onclick="sortTourn(6)" data-col="6">SF</th>'
+        '<th onclick="sortTourn(7)" data-col="7">Final</th>'
+        '<th onclick="sortTourn(8)" data-col="8" class="sort-active">Champion &#8595;</th>'
+        '</tr></thead><tbody>'
+    )
+
+    body_rows = []
+    for i, r in enumerate(rows):
+        team, pa, pr16, pqf, psf, pf, pc, spi = r
+        spi_str = f"{spi:.1f}" if spi is not None else "—"
+        body_rows.append(
+            f'<tr>'
+            f'<td>{i + 1}</td>'
+            f'<td>{flag(team)}&nbsp;{esc(team)}</td>'
+            f'<td>{spi_str}</td>'
+            f'<td {cell_bg(pa,  "p_group_advance")}>{pa  * 100:.1f}%</td>'
+            f'<td {cell_bg(pr16,"p_r16"          )}>{pr16 * 100:.1f}%</td>'
+            f'<td {cell_bg(pqf, "p_qf"           )}>{pqf  * 100:.1f}%</td>'
+            f'<td {cell_bg(psf, "p_sf"            )}>{psf  * 100:.1f}%</td>'
+            f'<td {cell_bg(pf,  "p_final"         )}>{pf   * 100:.1f}%</td>'
+            f'<td {cell_bg(pc,  "p_champion"      )}>{pc   * 100:.1f}%</td>'
+            f'</tr>'
+        )
+
+    js = (
+        '<script>'
+        'var _tDir=-1,_tCol=8;'
+        'function sortTourn(col){'
+        'var tbl=document.getElementById("tourn-table");'
+        'var tbody=tbl.querySelector("tbody");'
+        'var rows=Array.from(tbody.querySelectorAll("tr"));'
+        'if(col===_tCol)_tDir*=-1;else{_tDir=-1;_tCol=col;}'
+        'rows.sort(function(a,b){'
+        'var av=a.cells[col].innerText.replace("%","").replace("—","0");'
+        'var bv=b.cells[col].innerText.replace("%","").replace("—","0");'
+        'return _tDir*(parseFloat(bv)-parseFloat(av));'
+        '});'
+        'rows.forEach(function(r,i){r.cells[0].innerText=i+1;tbody.appendChild(r);});'
+        'tbl.querySelectorAll("th").forEach(function(th,i){'
+        'th.className=i===_tCol?"sort-active":"";'
+        'th.innerHTML=th.innerHTML.replace(/[ ↑↓↑↓]/g,"")+(i===_tCol?(_tDir===-1?" ↓":" ↑"):"");'
+        '});'
+        '}'
+        '</script>'
+    )
+
+    return (
+        header + "".join(body_rows) + '</tbody></table>'
+        '<p class="tourn-note">Probabilities from 10,000-run Monte Carlo simulation '
+        'using SPI Poisson model. Updated daily.</p>'
+        '</div>' + js
+    )
 
 
 def build_groups_data(schedule, groups, odds, completed_results):
@@ -791,24 +1132,20 @@ def build_groups_data(schedule, groups, odds, completed_results):
             key = (g["home"], g["away"])
             if key in completed_results:
                 continue
-            o = odds.get(key)
-            if o:
-                matches.append({
-                    "home": g["home"],
-                    "away": g["away"],
-                    "home_win_prob": o["home_prob"],
-                    "draw_prob": o["draw_prob"],
-                    "away_win_prob": o["away_prob"],
-                })
+            pred = get_spi_prediction(g["home"], g["away"])
+            if pred:
+                hw = pred["spi_home_win"]
+                d  = pred["spi_draw"]
+                aw = pred["spi_away_win"]
             else:
-                matches.append({
-                    "home": g["home"],
-                    "away": g["away"],
-                    "home_win_prob": 1 / 3,
-                    "draw_prob": 1 / 3,
-                    "away_win_prob": 1 / 3,
-                })
-                missing_odds_matches.append(f"{g['home']} vs {g['away']} (Group {grp})")
+                hw, d, aw = 1 / 3, 1 / 3, 1 / 3
+            matches.append({
+                "home": g["home"],
+                "away": g["away"],
+                "home_win_prob": hw,
+                "draw_prob": d,
+                "away_win_prob": aw,
+            })
         groups_data[grp] = {"teams": teams, "matches": matches, "fixed_points": fixed_points}
 
     return groups_data, missing_odds_matches, current_actual_points
@@ -874,72 +1211,22 @@ def run_all_simulations(groups_data, n=10000):
     return results
 
 
-def team_expected_wins(team: str, odds: dict, schedule: list = None):
-    """Sum of win probabilities across all group games with available odds (0–3 scale)."""
-    if schedule is None:
-        schedule = _SCHEDULE_FALLBACK
-    total = 0.0
-    found = 0
-    for g in schedule:
-        if g["home"] == team:
-            o = odds.get((g["home"], g["away"]))
-            if o:
-                total += o["home_prob"]
-                found += 1
-        elif g["away"] == team:
-            o = odds.get((g["home"], g["away"]))
-            if o:
-                total += o["away_prob"]
-                found += 1
-    return total if found > 0 else None
-
-
 # ---------------------------------------------------------------------------
 # HTML builder
 # ---------------------------------------------------------------------------
 
-def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = None, title_probs: dict = None,
+def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = None,
                sim_results: dict = None, current_actual_points: dict = None) -> str:
     if schedule is None:
         schedule = _SCHEDULE_FALLBACK
     if results is None:
         results = {}
-    if title_probs is None:
-        title_probs = {}
 
-    # ---- pre-compute watchability for all 72 games ----
-    # competitiveness: 1.0 = perfect 33/33/33 split, 0.0 = one outcome at 100%
-    # stakes: Spain+France combined title prob as the ceiling (always 0–1)
-    tp_spain  = title_probs.get("Spain",  0.0) or 0.0
-    tp_france = title_probs.get("France", 0.0) or 0.0
-    max_combined = tp_spain + tp_france
-
-    ceiling = max_combined if max_combined > 0 else 0.349
-    # ref is the zero-anchor: derived so that combined=2/48 (one avg team each)
-    # maps to exactly 0.5. formula: log(combined/ref) / log(ceiling/ref)
-    # solving for ref given score(2/48)=0.5 → ref = (2/48)² / ceiling
-    baseline = 2 / 48
-    ref = (baseline ** 2) / ceiling
-
+    # ---- pre-compute watchability for all 72 games (SPI 3-component model) ----
+    _ensure_match_predictions()
     watchability: dict = {}
     for g in schedule:
-        key = (g["home"], g["away"])
-        o = odds.get(key)
-        if not o:
-            watchability[key] = None
-            continue
-        max_outcome = max(o["home_prob"], o["draw_prob"], o["away_prob"])
-        competitiveness = 1.0 - ((max_outcome - 1/3) / (2/3))
-
-        tp_h = title_probs.get(g["home"], 0.0) or 0.0
-        tp_a = title_probs.get(g["away"], 0.0) or 0.0
-        combined = tp_h + tp_a
-        if combined <= ref:
-            stakes = 0.0
-        else:
-            stakes = max(0.0, min(math.log(combined / ref) / math.log(ceiling / ref), 1.0))
-
-        watchability[key] = round(((competitiveness + stakes) / 2) * 100)
+        watchability[(g["home"], g["away"])] = watchability_score(g["home"], g["away"])
 
     # ---- schedule ----
     date_games: dict = {}
@@ -1004,13 +1291,7 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
             w = watchability.get(game_key)
             data_w = str(w) if w is not None else ""
             card_cls = watch_cls(w)
-            tp_h = title_probs.get(g["home"])
-            tp_a = title_probs.get(g["away"])
             watch_score_str = str(w) if w is not None else "—"
-            watch_pending_html = (
-                '<span class="watch-pending">⚠ title odds pending</span>'
-                if o and (tp_h is None or tp_a is None) else ""
-            )
 
             r = results.get(game_key)
 
@@ -1019,18 +1300,19 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                 hs = r["home_score"]
                 aws = r["away_score"]
 
+                comp_pred = get_spi_prediction(g["home"], g["away"])
                 if hs > aws:
                     home_cls, away_cls = "winner", "loser"
-                    winning_prob = hp
-                    losing_prob  = ap
+                    winning_prob = comp_pred["spi_home_win"] if comp_pred else None
+                    losing_prob  = comp_pred["spi_away_win"] if comp_pred else None
                 elif aws > hs:
                     home_cls, away_cls = "loser", "winner"
-                    winning_prob = ap
-                    losing_prob  = hp
+                    winning_prob = comp_pred["spi_away_win"] if comp_pred else None
+                    losing_prob  = comp_pred["spi_home_win"] if comp_pred else None
                 else:
                     home_cls = away_cls = ""
-                    winning_prob = dp
-                    losing_prob  = max(hp, ap) if hp is not None else None
+                    winning_prob = comp_pred["spi_draw"] if comp_pred else None
+                    losing_prob  = max(comp_pred["spi_home_win"], comp_pred["spi_away_win"]) if comp_pred else None
 
                 is_upset = (
                     winning_prob is not None and
@@ -1038,36 +1320,6 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     winning_prob < losing_prob
                 )
                 upset_badge = '<span class="upset-badge">UPSET</span>' if is_upset else ""
-
-                if hp is not None:
-                    home_w = int(hp * 100)
-                    draw_w = int(dp * 100)
-                    away_w = 100 - home_w - draw_w
-                    hist_html = (
-                        f'<div class="odds-hist">'
-                        f'<div class="odds-hist-label">Pre-game odds</div>'
-                        f'<div class="seg-bar-wrap">'
-                        f'<div class="seg-home" style="width:{home_w}%"></div>'
-                        f'<div class="seg-draw" style="width:{draw_w}%"></div>'
-                        f'<div class="seg-away" style="width:{away_w}%"></div>'
-                        f'</div>'
-                        f'<div class="prob-labels">'
-                        f'<span class="prob-label-home">Home&nbsp;{fmt_pct(hp)}</span>'
-                        f'<span class="prob-label-draw">Draw&nbsp;{fmt_pct(dp)}</span>'
-                        f'<span class="prob-label-away">Away&nbsp;{fmt_pct(ap)}</span>'
-                        f'</div></div>'
-                    )
-                else:
-                    hist_html = ""
-
-                home_tp_html = (
-                    f'<span class="title-prob faded">{tp_h*100:.1f}% title odds</span>'
-                    if tp_h is not None else ""
-                )
-                away_tp_html = (
-                    f'<span class="title-prob faded">{tp_a*100:.1f}% title odds</span>'
-                    if tp_a is not None else ""
-                )
 
                 sched.append(
                     f'<div class="game-card gray" data-w="" data-date="{esc(g["date"])}" data-completed="1">'
@@ -1083,7 +1335,6 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<span class="team-flag">{flag(g["home"])}</span>'
                     f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["home"])}</span>'
-                    + home_tp_html +
                     f'</div>'
                     f'<span class="team-score">{hs}</span>'
                     f'</div>'
@@ -1093,49 +1344,59 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<span class="team-flag">{flag(g["away"])}</span>'
                     f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["away"])}</span>'
-                    + away_tp_html +
                     f'</div>'
                     f'<span class="team-score">{aws}</span>'
                     f'</div>'
                     f'</div>'
-                    + hist_html +
                     f'<div class="venue-row">{esc(g["venue"])}</div>'
                     f'</div>'
                 )
             else:
                 # ── upcoming / no result yet ─────────────────────────────────
-                if hp is not None:
-                    home_w = int(hp * 100)
-                    draw_w = int(dp * 100)
-                    away_w = 100 - home_w - draw_w
+                pred = get_spi_prediction(g["home"], g["away"])
+                if pred:
+                    hw_pct = round(pred["spi_home_win"] * 100)
+                    dr_pct = round(pred["spi_draw"] * 100)
+                    aw_pct = 100 - hw_pct - dr_pct
                     prob_html = (
                         f'<div class="seg-bar-wrap">'
-                        f'<div class="seg-home" style="width:{home_w}%"></div>'
-                        f'<div class="seg-draw" style="width:{draw_w}%"></div>'
-                        f'<div class="seg-away" style="width:{away_w}%"></div>'
+                        f'<div class="seg-home" style="width:{hw_pct}%"></div>'
+                        f'<div class="seg-draw" style="width:{dr_pct}%"></div>'
+                        f'<div class="seg-away" style="width:{aw_pct}%"></div>'
                         f'</div>'
                         f'<div class="prob-labels">'
-                        f'<span class="prob-label-home">Home&nbsp;{fmt_pct(hp)}</span>'
-                        f'<span class="prob-label-draw">Draw&nbsp;{fmt_pct(dp)}</span>'
-                        f'<span class="prob-label-away">Away&nbsp;{fmt_pct(ap)}</span>'
+                        f'<span class="prob-label-home">{esc(abbrev(g["home"]))}&nbsp;{hw_pct}%</span>'
+                        f'<span class="prob-label-draw">Draw&nbsp;{dr_pct}%</span>'
+                        f'<span class="prob-label-away">{esc(abbrev(g["away"]))}&nbsp;{aw_pct}%</span>'
                         f'</div>'
                     )
+                    mu_h = pred.get("mu_home")
+                    mu_a = pred.get("mu_away")
+                    ml_score = pred.get("most_likely_score") or ""
+                    if mu_h is not None and mu_a is not None and ml_score:
+                        spi_score_html = (
+                            f'<div class="spi-score-line">'
+                            f'Most likely: {esc(ml_score)}'
+                            f'&nbsp;&nbsp;|&nbsp;&nbsp;xG:&nbsp;{mu_h:.1f}&thinsp;&mdash;&thinsp;{mu_a:.1f}'
+                            f'</div>'
+                        )
+                    else:
+                        spi_score_html = ""
                 else:
-                    prob_html = '<div class="no-odds-msg">Odds not yet available</div>'
+                    prob_html = '<div class="no-odds-msg">Model pending</div>'
+                    spi_score_html = ""
 
-                home_tp_html = (
-                    f'<span class="title-prob">{tp_h*100:.1f}% title odds</span>'
-                    if tp_h is not None else ""
-                )
-                away_tp_html = (
-                    f'<span class="title-prob">{tp_a*100:.1f}% title odds</span>'
-                    if tp_a is not None else ""
-                )
+                lev = get_leverage(g["home"], g["away"])
+                if lev is not None and lev > 0:
+                    lev_badge = f'<span class="lev-badge">&#9889; Leverage {lev:.3f}</span>'
+                else:
+                    lev_badge = ""
 
                 sched.append(
                     f'<div class="game-card {card_cls}" data-w="{data_w}" data-date="{esc(g["date"])}">'
                     f'<div class="card-top">'
                     f'<span class="grp-badge">GRP {esc(g["grp"])}</span>'
+                    + lev_badge +
                     f'<span class="date-chip">{esc(g["date"])}</span>'
                     f'<span class="card-time">{esc(g["time"])}</span>'
                     f'</div>'
@@ -1143,7 +1404,6 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<span class="watch-label">Watchability</span>'
                     f'<div class="watch-bar-wrap"><div class="watch-bar-fill" style="width:{data_w}%"></div></div>'
                     f'<span class="watch-score">{watch_score_str}</span>'
-                    + watch_pending_html +
                     f'</div>'
                     f'<div class="matchup">'
                     f'<div class="team-row">'
@@ -1151,7 +1411,6 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<span class="team-flag">{flag(g["home"])}</span>'
                     f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["home"])}</span>'
-                    + home_tp_html +
                     f'</div>'
                     f'</div>'
                     f'<div class="vs-line">vs</div>'
@@ -1160,17 +1419,18 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<span class="team-flag">{flag(g["away"])}</span>'
                     f'<div class="team-name-wrap">'
                     f'<span class="team-name">{esc(g["away"])}</span>'
-                    + away_tp_html +
                     f'</div>'
                     f'</div>'
                     f'</div>'
                     + prob_html +
+                    spi_score_html +
                     f'<div class="venue-row">{esc(g["venue"])}</div>'
                     f'</div>'
                 )
         sched.append('</div></div>')
 
     # ---- group standings HTML (Monte Carlo) ----
+    spi_champ_probs = {team: pc for team, pc, _ in get_leaderboard_data()}
     gs = []
     for grp, teams in GROUPS.items():
         gs.append(f'<div class="gs-group"><div class="gs-title">Group {esc(grp)}</div>')
@@ -1190,13 +1450,13 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                 '<th class="mc-th-2nd">2nd</th>'
                 '<th class="mc-th-3rd">3rd</th>'
                 '<th class="mc-th-4th">4th</th>'
-                '<th class="mc-th-champ">Champ</th>'
+                '<th class="mc-th-champ">Win prob</th>'
                 '</tr></thead><tbody>'
             )
             for team in sorted_teams:
                 probs = grp_sim[team]
                 p1, p2, p3, p4 = probs[1], probs[2], probs[3], probs[4]
-                tp = title_probs.get(team)
+                tp = spi_champ_probs.get(team)
                 champ_str = f"{tp * 100:.1f}%" if tp is not None else "&mdash;"
                 gs.append(
                     f'<tr>'
@@ -1211,12 +1471,13 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
             gs.append('</tbody></table>')
         else:
             ranked = sorted(
-                [(t, team_expected_wins(t, odds)) for t in teams],
+                [(t, spi_champ_probs.get(t)) for t in teams],
                 key=lambda x: -(x[1] if x[1] is not None else -1),
             )
             best = max((p for _, p in ranked if p is not None), default=None)
-            for team, xw in ranked:
-                bar_w = int((xw / best) * 100) if xw is not None and best else 0
+            for team, pc in ranked:
+                bar_w = int((pc / best) * 100) if pc is not None and best else 0
+                pct_str = f"{pc * 100:.1f}%" if pc is not None else "—"
                 gs.append(
                     f'<div class="gs-row">'
                     f'<span class="gs-flag">{flag(team)}</span>'
@@ -1225,7 +1486,7 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
                     f'<div class="gs-bar-track">'
                     f'<div class="gs-bar-fill" style="width:{bar_w}%"></div>'
                     f'</div></div>'
-                    f'<span class="gs-pct">{f"{xw:.2f}" if xw is not None else "—"}</span>'
+                    f'<span class="gs-pct">{pct_str}</span>'
                     f'</div>'
                 )
 
@@ -1244,7 +1505,7 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         "<header>",
         '<p class="header-eyebrow">2026 FIFA World Cup &bull; Group Stage</p>',
         "<h1>&#9917; 2026 FIFA World Cup <span>&mdash; Watchability</span></h1>",
-        '<p class="subtitle">All 72 group stage matches ranked by competitiveness and championship stakes &mdash; using bookmaker odds to measure what&rsquo;s on the line.</p>',
+        '<p class="subtitle">All 72 group stage matches ranked by competitiveness and championship stakes &mdash; powered by the SPI model.</p>',
         "</header>",
         '<div class="summary-strip">',
         '<div class="summary-item"><span class="s-label">Game of the Day</span>',
@@ -1254,16 +1515,19 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         f'<span class="s-value small">{esc(updated_str)}</span></div>',
         "</div>",
         '<div class="legend-bar">',
-        '<span><span class="dot green"></span>High watchability (&ge;60)</span>',
-        '<span><span class="dot amber"></span>Moderate watchability (30&ndash;59)</span>',
-        '<span><span class="dot red"></span>Low watchability (&lt;30)</span>',
-        '<span style="color:#3b82f6">&#9632;</span><span>Home win</span>',
-        '<span style="color:#6b7280">&#9632;</span><span>Draw</span>',
-        '<span style="color:#f97316">&#9632;</span><span>Away win</span>',
-        '<span style="opacity:.5">&#9632;</span><span style="opacity:.5">Faded bar = pre-game odds</span>',
+        '<span><span class="dot green"></span>High watchability (&ge;75)</span>',
+        '<span><span class="dot blue"></span>Good watchability (60&ndash;74)</span>',
+        '<span><span class="dot red"></span>Lower watchability (&lt;60)</span>',
+        '<span style="color:#2f81f7">&#9632;</span><span>Home win</span>',
+        '<span style="color:#6e7681">&#9632;</span><span>Draw</span>',
+        '<span style="color:#93c5fd">&#9632;</span><span>Away win</span>',
         "</div>",
-        '<div class="main-layout">',
-        '<div class="schedule-col">',
+        '<div class="tab-bar">',
+        '<button class="tab-btn tab-active" onclick="showTab(\'schedule\')">Daily Schedule</button>',
+        '<button class="tab-btn" onclick="showTab(\'tournament\')">Tournament</button>',
+        '</div>',
+        '<div id="tab-schedule" class="tab-panel tab-visible">',
+        '<div class="schedule-wrap">',
         '<div class="section-label">Group Stage Schedule &mdash; 72 Games</div>',
         '<div class="sort-toggle">',
         '<button id="btn-date" class="sort-btn sort-active" onclick="setSort(\'date\')">By date</button>',
@@ -1273,17 +1537,28 @@ def build_html(odds: dict, fetched_at, schedule: list = None, results: dict = No
         "".join(sched),
         "</div>",
         "</div>",
-        '<div class="sidebar-col">',
-        '<div class="section-label">Group Standings &mdash; Monte Carlo Simulator</div>',
-        '<p class="mc-sim-note">Simulated using 10,000 runs per group. Completed results are fixed; remaining games use bookmaker odds.</p>',
+        "</div>",
+        '<div id="tab-tournament" class="tab-panel">',
+        build_tournament_tab(),
+        '<div class="tourn-wrap">',
+        '<div class="section-label" style="margin-bottom:12px">Group Stage Standings &amp; Projections</div>',
+        '<p class="mc-sim-note">Simulated using 10,000 runs per group. Completed results are fixed; remaining games use SPI model probabilities.</p>',
         '<div class="gs-panel">',
         "".join(gs),
-        "</div></div>",
+        "</div>",
+        "</div>",
         "</div>",
         "<footer><p>Odds from "
         '<a href="https://the-odds-api.com" target="_blank" rel="noopener">The Odds API</a>'
         " &bull; Vig removed &bull; Win probabilities averaged across US bookmakers</p></footer>",
         "<script>",
+        "window.showTab=function(id){",
+        "  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('tab-visible');});",
+        "  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('tab-active');});",
+        "  var p=document.getElementById('tab-'+id);if(p)p.classList.add('tab-visible');",
+        "  var label=id==='schedule'?'Daily Schedule':'Tournament';",
+        "  document.querySelectorAll('.tab-btn').forEach(function(b){if(b.textContent.trim()===label)b.classList.add('tab-active');});",
+        "};",
         "(function(){",
         "var s=document.getElementById('schedule-content');",
         "function initToggles(){",
@@ -1339,7 +1614,6 @@ def main() -> None:
     odds, fetched_at = get_odds(DB_PATH)
     results = get_results(DB_PATH)
     completed_results = get_completed_results(DB_PATH)
-    title_probs = get_title_probs(DB_PATH)
     schedule = get_schedule(DB_PATH)
     if not odds:
         print("WARNING: No match odds in DB — generating skeleton dashboard.")
@@ -1357,7 +1631,7 @@ def main() -> None:
         if len(missing_odds) > 5:
             print(f"  ... and {len(missing_odds) - 5} more")
 
-    html = build_html(odds, fetched_at, schedule, results, title_probs, sim_results, current_actual_points)
+    html = build_html(odds, fetched_at, schedule, results, sim_results, current_actual_points)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
