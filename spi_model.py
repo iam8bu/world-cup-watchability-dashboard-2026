@@ -97,6 +97,64 @@ def load_kaggle(filename: str) -> pd.DataFrame:
     )
 
 
+def seed_historical() -> None:
+    """
+    One-time setup: download Kaggle CSV, filter to [START_DATE, WC2026_START),
+    normalize team names, and store as 'historical_matches' in spi_ratings.db.
+    Requires Kaggle credentials (~/.kaggle/kaggle.json). Run locally once.
+    """
+    print("Seeding historical_matches from Kaggle (one-time setup)...")
+    try:
+        raw_df = load_kaggle("results.csv")
+    except Exception as e:
+        import sys
+        print(f"ERROR fetching from Kaggle: {e}")
+        sys.exit(1)
+
+    raw_df["date"] = pd.to_datetime(raw_df["date"]).dt.date
+    df = raw_df[(raw_df["date"] >= START_DATE) & (raw_df["date"] < WC2026_START)].copy()
+    df["home_team"] = df["home_team"].apply(normalize)
+    df["away_team"] = df["away_team"].apply(normalize)
+
+    conn = sqlite3.connect(DB_PATH)
+    df.to_sql("historical_matches", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"  Stored {len(df):,} matches ({df['date'].min()} → {df['date'].max()}) in spi_ratings.db")
+    print("  Run 'python spi_model.py' to fit SPI0 baseline from stored data.")
+
+
+def load_historical_from_db() -> pd.DataFrame:
+    """
+    Read pre-tournament training data from spi_ratings.db.
+    Exits with a clear error if the table is missing — never falls back to Kaggle.
+    Seed it once with: python spi_model.py --init
+    """
+    import sys
+    missing_msg = (
+        "ERROR: 'historical_matches' table not found in spi_ratings.db.\n"
+        "Run once (requires Kaggle credentials): python spi_model.py --init"
+    )
+    if not os.path.exists(DB_PATH):
+        print(missing_msg)
+        sys.exit(1)
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='historical_matches'"
+        ).fetchone()
+        if not tbl:
+            print(missing_msg)
+            sys.exit(1)
+        df = pd.read_sql("SELECT * FROM historical_matches", conn)
+    finally:
+        conn.close()
+    if df.empty:
+        print(missing_msg)
+        sys.exit(1)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df
+
+
 def load_wc2026_results() -> pd.DataFrame:
     """Load completed WC2026 match results from odds.db as a training DataFrame."""
     if not os.path.exists(ODDS_DB_PATH):
@@ -130,20 +188,12 @@ def load_wc2026_results() -> pd.DataFrame:
 
 
 def main() -> None:
-    print("Fetching results.csv from Kaggle...")
-    try:
-        raw_df = load_kaggle("results.csv")
-    except Exception as e:
-        print(f"ERROR: {e}")
-        return
+    # Pre-tournament ratings are frozen in historical_matches (seeded once via --init).
+    # WC2026 results are appended fresh each run so ratings update permanently as games finish.
+    df = load_historical_from_db()
+    print(f"  Loaded {len(df):,} historical matches from spi_ratings.db ({df['date'].min()} → {df['date'].max()})")
 
-    # Parse dates; filter to START_DATE and strictly before WC2026 start to avoid overlap
-    raw_df["date"] = pd.to_datetime(raw_df["date"]).dt.date
-    df = raw_df[(raw_df["date"] >= START_DATE) & (raw_df["date"] < WC2026_START)].copy()
-    df["home_team"] = df["home_team"].apply(normalize)
-    df["away_team"] = df["away_team"].apply(normalize)
-
-    # Load and append live WC2026 results from odds.db
+    # Append completed WC2026 results — teams that played get permanently updated ratings
     wc2026_df = load_wc2026_results()
     if not wc2026_df.empty:
         print(f"  Appending {len(wc2026_df)} WC2026 results from odds.db")
@@ -155,7 +205,7 @@ def main() -> None:
             print(f"  ✓ All WC2026 team names matched to WC2026_TEAMS")
         df = pd.concat([df, wc2026_df], ignore_index=True)
     else:
-        print("  No WC2026 results in odds.db yet — training on historical data only")
+        print("  No WC2026 results in odds.db yet — using SPI0 baseline only")
 
     reference_date = df["date"].max()
     print(f"  {len(df):,} matches from {df['date'].min()} to {reference_date}")
@@ -1775,7 +1825,9 @@ def compute_all_leverage(n_baseline: int = 5000, n_conditional: int = 2000, db_p
 
 if __name__ == "__main__":
     import sys
-    if "--predict" in sys.argv:
+    if "--init" in sys.argv:
+        seed_historical()
+    elif "--predict" in sys.argv:
         validate_predictions()
     elif "--simulate" in sys.argv:
         run_full_tournament_simulation()
