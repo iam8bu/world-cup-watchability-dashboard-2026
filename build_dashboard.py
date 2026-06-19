@@ -1128,6 +1128,18 @@ def build_groups_data(schedule, groups, odds, completed_results):
 
     for grp, teams in groups.items():
         fixed_points = {t: current_actual_points.get(t, 0) for t in teams}
+        fixed_gf     = {t: 0 for t in teams}
+        fixed_ga     = {t: 0 for t in teams}
+        fixed_h2h    = {}
+
+        for (home, away), result in completed_results.items():
+            if home not in fixed_gf or away not in fixed_gf:
+                continue
+            hs, aws = result["home_score"], result["away_score"]
+            fixed_gf[home] += hs;  fixed_ga[home] += aws
+            fixed_gf[away] += aws; fixed_ga[away] += hs
+            fixed_h2h[(home, away)] = (hs, aws)
+
         matches = []
         for g in schedule:
             if g["grp"] != grp:
@@ -1137,21 +1149,114 @@ def build_groups_data(schedule, groups, odds, completed_results):
                 continue
             pred = get_spi_prediction(g["home"], g["away"])
             if pred:
-                hw = pred["spi_home_win"]
-                d  = pred["spi_draw"]
-                aw = pred["spi_away_win"]
+                hw       = pred["spi_home_win"]
+                d        = pred["spi_draw"]
+                aw       = pred["spi_away_win"]
+                mu_home  = pred.get("mu_home") or 1.2
+                mu_away  = pred.get("mu_away") or 1.0
             else:
-                hw, d, aw = 1 / 3, 1 / 3, 1 / 3
+                hw, d, aw       = 1 / 3, 1 / 3, 1 / 3
+                mu_home, mu_away = 1.2, 1.0
             matches.append({
                 "home": g["home"],
                 "away": g["away"],
                 "home_win_prob": hw,
-                "draw_prob": d,
+                "draw_prob":     d,
                 "away_win_prob": aw,
+                "mu_home":       mu_home,
+                "mu_away":       mu_away,
             })
-        groups_data[grp] = {"teams": teams, "matches": matches, "fixed_points": fixed_points}
+        groups_data[grp] = {
+            "teams":       teams,
+            "matches":     matches,
+            "fixed_points": fixed_points,
+            "fixed_gf":    fixed_gf,
+            "fixed_ga":    fixed_ga,
+            "fixed_h2h":   fixed_h2h,
+        }
 
     return groups_data, missing_odds_matches, current_actual_points
+
+
+def _poisson_sample(lam: float) -> int:
+    """Sample from Poisson(lam) using Knuth's algorithm."""
+    if lam <= 0:
+        return 0
+    L = math.exp(-min(lam, 20))
+    k, p = 0, 1.0
+    while True:
+        k += 1
+        p *= random.random()
+        if p <= L:
+            return k - 1
+
+
+def _rank_group_stage_tied(teams: list, h2h: dict, ogd: dict, ogf: dict) -> list:
+    """
+    Rank equal-points teams by FIFA 2026 Article 13 cascade:
+      H2H pts → H2H GD → H2H GF* → overall GD → overall GF → random
+    * H2H GF is skipped for 2-team subsets: in a single round-robin each pair
+      plays exactly once, so H2H GD tied for two teams means the match was a
+      draw (equal goals each way), making H2H GF identical as well.
+      If the format ever allowed multiple H2H matches this skip would not hold.
+    h2h : {(home, away): (home_score, away_score)} — either key order accepted.
+    """
+    from itertools import combinations
+
+    def _h2h_stats(subset):
+        pts = {t: 0 for t in subset}
+        gd  = {t: 0 for t in subset}
+        gf  = {t: 0 for t in subset}
+        for a, b in combinations(subset, 2):
+            if   (a, b) in h2h: ga, gb = h2h[(a, b)]
+            elif (b, a) in h2h: gb, ga = h2h[(b, a)]
+            else: continue
+            gf[a] += ga; gf[b] += gb
+            gd[a] += ga - gb; gd[b] += gb - ga
+            if   ga > gb: pts[a] += 3
+            elif gb > ga: pts[b] += 3
+            else:         pts[a] += 1; pts[b] += 1
+        return pts, gd, gf
+
+    def _partition(lst, key_fn):
+        vals = {t: key_fn(t) for t in lst}
+        return [[t for t in lst if vals[t] == v]
+                for v in sorted(set(vals.values()), reverse=True)]
+
+    def _rank_overall(subset):
+        result = []
+        for g1 in _partition(subset, lambda t: ogd[t]):
+            if len(g1) == 1:
+                result.extend(g1)
+            else:
+                for g2 in _partition(g1, lambda t: ogf[t]):
+                    if len(g2) == 1:
+                        result.extend(g2)
+                    else:
+                        result.extend(sorted(g2, key=lambda _: random.random()))
+        return result
+
+    def _rank_h2h(subset, crit_idx):
+        if len(subset) == 1:
+            return list(subset)
+        # Skip H2H GF for 2-team subsets (see docstring above).
+        if crit_idx > 2 or (crit_idx == 2 and len(subset) == 2):
+            return _rank_overall(subset)
+        hp, hgd, hgf = _h2h_stats(subset)
+        crit = (hp, hgd, hgf)[crit_idx]
+        groups = _partition(subset, lambda t: crit[t])
+        if len(groups) == 1:
+            return _rank_h2h(subset, crit_idx + 1)
+        result = []
+        for group in groups:
+            if len(group) == 1:
+                result.extend(group)
+            else:
+                # Article 13: reduced sub-group restarts from H2H step 1.
+                result.extend(_rank_h2h(group, 0))
+        return result
+
+    return _rank_h2h(list(teams), 0)
 
 
 def run_all_simulations(groups_data, n=10000):
@@ -1174,34 +1279,50 @@ def run_all_simulations(groups_data, n=10000):
         third_place_info = []
 
         for grp in group_names:
-            gd = groups_data[grp]
+            gd    = groups_data[grp]
             teams = gd["teams"]
-            points = {t: gd["fixed_points"].get(t, 0) for t in teams}
+            points = dict(gd["fixed_points"])
+            gf     = dict(gd["fixed_gf"])
+            ga     = dict(gd["fixed_ga"])
+            h2h    = dict(gd["fixed_h2h"])
 
             for match in gd["matches"]:
-                result = random.choices(
-                    ["home", "draw", "away"],
-                    weights=[match["home_win_prob"], match["draw_prob"], match["away_win_prob"]],
-                )[0]
-                if result == "home":
+                hs  = _poisson_sample(match["mu_home"])
+                aws = _poisson_sample(match["mu_away"])
+                h2h[(match["home"], match["away"])] = (hs, aws)
+                gf[match["home"]] += hs;  ga[match["home"]] += aws
+                gf[match["away"]] += aws; ga[match["away"]] += hs
+                if hs > aws:
                     points[match["home"]] += 3
-                elif result == "draw":
+                elif aws > hs:
+                    points[match["away"]] += 3
+                else:
                     points[match["home"]] += 1
                     points[match["away"]] += 1
-                else:
-                    points[match["away"]] += 3
 
-            standings = sorted(
-                teams, key=lambda t: (points[t], random.random()), reverse=True
-            )
+            ogd = {t: gf[t] - ga[t] for t in teams}
+
+            # Rank: group by points, then apply FIFA 2026 Article 13 within ties.
+            by_pts = {}
+            for t in teams:
+                by_pts.setdefault(points[t], []).append(t)
+            standings = []
+            for pt_val in sorted(by_pts, reverse=True):
+                tied = by_pts[pt_val]
+                if len(tied) == 1:
+                    standings.extend(tied)
+                else:
+                    standings.extend(_rank_group_stage_tied(tied, h2h, ogd, gf))
+
             for pos, team in enumerate(standings, 1):
                 finish_counts[grp][team][pos] += 1
 
             third_team = standings[2]
-            third_place_info.append((points[third_team], random.random(), grp, third_team))
+            third_ogd  = ogd[third_team]
+            third_place_info.append((points[third_team], third_ogd, random.random(), grp, third_team))
 
-        third_place_info.sort(key=lambda x: (x[0], x[1]), reverse=True)
-        for _, _, grp, team in third_place_info[:8]:
+        third_place_info.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+        for *_, grp, team in third_place_info[:8]:
             third_adv_counts[grp][team] += 1
 
     results = {}
