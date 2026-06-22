@@ -1218,17 +1218,22 @@ def _precompute_match_cache(db_path: str = DB_PATH) -> dict:
 
 
 def _sim_group(teams: list, matchups: list, cache: dict, fixed_results=None) -> list:
-    """Simulate one group. Returns [(team, pts, gd), ...] best-to-worst."""
-    pts: dict = {t: 0 for t in teams}
-    gd:  dict = {t: 0 for t in teams}
+    """Simulate one group. Returns [(team, pts, gd), ...] best-to-worst.
+
+    Tiebreaker order (FIFA 2026): H2H pts → H2H GD → H2H GF →
+    overall GD → overall GF → random.
+    """
+    pts:  dict = {t: 0 for t in teams}
+    gd:   dict = {t: 0 for t in teams}
+    gf:   dict = {t: 0 for t in teams}
+    game_results: dict = {}  # (ta, tb) -> (goals_ta, goals_tb)
+
     for ta, tb in matchups:
         if fixed_results and (ta, tb) in fixed_results:
             fr = fixed_results[(ta, tb)]
             if isinstance(fr, tuple):
-                # Exact scoreline (used for completed games)
                 ga, gb = int(fr[0]), int(fr[1])
             else:
-                # Rejection-sample goals consistent with the fixed outcome
                 _, _, _, mu_a, mu_b = cache[(ta, tb)]
                 while True:
                     ga = int(np.random.poisson(mu_a))
@@ -1243,9 +1248,13 @@ def _sim_group(teams: list, matchups: list, cache: dict, fixed_results=None) -> 
             _, _, _, mu_a, mu_b = cache[(ta, tb)]
             ga = int(np.random.poisson(mu_a))
             gb = int(np.random.poisson(mu_b))
+
+        game_results[(ta, tb)] = (ga, gb)
         d = ga - gb
         gd[ta] += d
         gd[tb] -= d
+        gf[ta] += ga
+        gf[tb] += gb
         if ga > gb:
             pts[ta] += 3
         elif gb > ga:
@@ -1253,7 +1262,45 @@ def _sim_group(teams: list, matchups: list, cache: dict, fixed_results=None) -> 
         else:
             pts[ta] += 1
             pts[tb] += 1
-    ranked = sorted(teams, key=lambda t: (pts[t], gd[t], np.random.random()), reverse=True)
+
+    rand_tb = {t: np.random.random() for t in teams}
+
+    def h2h_stats(team, tied_set):
+        h_pts = h_gd = h_gf = 0
+        for opp in tied_set:
+            if opp == team:
+                continue
+            if (team, opp) in game_results:
+                ga, gb = game_results[(team, opp)]
+            else:
+                gb, ga = game_results[(opp, team)]
+            h_gf += ga
+            h_gd += ga - gb
+            if ga > gb:
+                h_pts += 3
+            elif ga == gb:
+                h_pts += 1
+        return h_pts, h_gd, h_gf
+
+    by_pts: dict = {}
+    for t in teams:
+        by_pts.setdefault(pts[t], []).append(t)
+
+    ranked = []
+    for p in sorted(by_pts.keys(), reverse=True):
+        tied = by_pts[p]
+        if len(tied) == 1:
+            ranked.extend(tied)
+        else:
+            tied_set = set(tied)
+            ranked.extend(sorted(
+                tied,
+                key=lambda t, ts=tied_set: (
+                    *(-x for x in h2h_stats(t, ts)),
+                    -gd[t], -gf[t], rand_tb[t]
+                ),
+            ))
+
     return [(t, pts[t], gd[t]) for t in ranked]
 
 
@@ -1323,7 +1370,8 @@ def _build_r32(w: dict, r: dict, third_teams: dict) -> list:
 
 def run_full_tournament_simulation(n: int = 10000, db_path: str = DB_PATH,
                                     fixed_result=None, _cache=None,
-                                    _save_to_db: bool = True, _verbose: bool = True) -> dict:
+                                    _save_to_db: bool = True, _verbose: bool = True,
+                                    advancement_only: bool = False) -> dict:
     """Monte Carlo simulation of the full FIFA 2026 World Cup (n iterations).
 
     Group stage: 12 groups × 6 games.  Best-8 third-place advance using ANNEX_C.
@@ -1418,6 +1466,9 @@ def run_full_tournament_simulation(n: int = 10000, db_path: str = DB_PATH,
         # Mark all 32 qualifiers
         for t in list(w_map.values()) + list(r_map.values()) + [x[4] for x in best8]:
             counts[t][0] += 1
+
+        if advancement_only:
+            continue
 
         # ── Build R32 bracket via Annex C ─────────────────────────────────────
         adv_groups = frozenset(third_teams.keys())
@@ -1608,7 +1659,7 @@ def _print_tournament_results(probs: dict) -> None:
     print(f"\n{'='*W}")
 
 
-def compute_all_leverage(n_baseline: int = 5000, n_conditional: int = 2000, db_path: str = DB_PATH) -> list:
+def compute_all_leverage(n_baseline: int = 5000, n_conditional: int = 5000, db_path: str = DB_PATH) -> list:
     """Compute leverage scores for all 72 group stage games.
 
     Leverage = expected total shift in championship probability across all 48
@@ -1674,6 +1725,7 @@ def compute_all_leverage(n_baseline: int = 5000, n_conditional: int = 2000, db_p
         n=n_baseline, db_path=db_path,
         fixed_result=completed_fixed, _cache=cache,
         _save_to_db=False, _verbose=False,
+        advancement_only=True,
     )
     print(f"  Baseline done in {time.time() - t1:.1f}s")
 
@@ -1716,9 +1768,10 @@ def compute_all_leverage(n_baseline: int = 5000, n_conditional: int = 2000, db_p
                 n=n_conditional, db_path=db_path,
                 fixed_result=fr, _cache=cache,
                 _save_to_db=False, _verbose=False,
+                advancement_only=True,
             )
             delta[outcome] = sum(
-                abs(cond[t]["p_champion"] - baseline_probs[t]["p_champion"])
+                abs(cond[t]["p_group_advance"] - baseline_probs[t]["p_group_advance"])
                 for t in WC2026_TEAMS
             )
 
