@@ -1,6 +1,6 @@
 # 2026 FIFA World Cup — Watchability Dashboard
 
-**[Live dashboard →](https://iam8bu.github.io/world-cup-odds-2026/)**
+**[Live dashboard →](https://iam8bu.github.io/world-cup-watchability-dashboard-2026/)**
 
 All 72 group-stage matches ranked by how worth watching they are — not just by kickoff time. Combines a custom Soccer Power Index (SPI) ratings model with live betting odds to score every match on competitiveness, stakes, and team quality.
 
