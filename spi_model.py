@@ -522,6 +522,12 @@ def dixon_coles_correction(
     mat[1][0] *= (1 + mu_b * rho)
     mat[0][1] *= (1 + mu_a * rho)
     mat[1][1] *= (1 - rho)
+    # Clip to non-negative — correction can produce negative values for
+    # high-mu matches with very negative rho (discovered in backtest.py rho_validation()).
+    mat[0][0] = max(mat[0][0], 0.0)
+    mat[1][0] = max(mat[1][0], 0.0)
+    mat[0][1] = max(mat[0][1], 0.0)
+    mat[1][1] = max(mat[1][1], 0.0)
     mat /= mat.sum()
     return mat
 

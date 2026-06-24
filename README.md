@@ -20,6 +20,7 @@ All 72 group-stage matches ranked by how worth watching they are. Uses a custom 
 | `spi_model.py` | Core SPI rating model — Poisson GLM with Dixon-Coles correction, tournament simulation, leverage calculation |
 | `fetch_results.py` | Pulls completed match results from a sportsbook API (used to refit the model as results come in), normalizes team names across data sources |
 | `build_dashboard.py` | Computes watchability scores and renders the static `index.html` |
+| `backtest.py` | Validation suite — walk-forward backtest plus sensitivity analyses (decay rate, tournament weights, Dixon-Coles rho) used to justify the model's tuned constants |
 | `.github/workflows/daily.yml` | Manually-triggered job: fetch results → refit ratings → re-simulate → rebuild dashboard → commit |
 | `odds.db`, `spi_ratings.db` | SQLite stores for fetched results and model output |
 
@@ -32,6 +33,6 @@ pip install requests scipy statsmodels pandas numpy
 python spi_model.py              # fit ratings
 python spi_model.py --simulate   # run tournament simulation
 python spi_model.py --leverage   # compute match leverage
-python fetch_results.py             # pull completed match results (requires ODDS_API_KEY)
+python fetch_results.py          # pull completed match results (requires ODDS_API_KEY)
 python build_dashboard.py        # render index.html
 ```
