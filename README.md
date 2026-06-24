@@ -13,6 +13,17 @@ All 72 group-stage matches ranked by how worth watching they are. Uses a custom 
   - **Importance** — how much the match result moves a team's odds of advancing (leverage)
   - **Quality** — combined SPI rating of both teams
 
+## Model performance
+
+Walk-forward backtested against all 48 completed WC2026 group-stage matches so far (`python backtest.py`) — the model is refit at each matchday using only data available before that date, so there's no look-ahead leakage:
+
+| Metric | Model | Random baseline |
+|---|---|---|
+| Avg log loss | 0.884 | 1.099 |
+| Avg Brier score | 0.541 | 0.667 |
+
+**19.5% improvement in log loss vs. random.** `backtest.py` also includes sensitivity analyses for the recency decay rate, tournament-importance weighting, and the Dixon-Coles rho correction — those results are what the tuned constants in `spi_model.py` are based on, not arbitrary defaults.
+
 ## How it's built
 
 | File | Role |
@@ -29,7 +40,7 @@ Historical match data comes from the [Kaggle international football results data
 ## Running it locally
 
 ```bash
-pip install requests scipy statsmodels pandas numpy
+pip install -r requirements.txt
 python spi_model.py              # fit ratings
 python spi_model.py --simulate   # run tournament simulation
 python spi_model.py --leverage   # compute match leverage
